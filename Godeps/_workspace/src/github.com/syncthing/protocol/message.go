@@ -116,6 +116,13 @@ type ClusterConfigMessage struct {
 	Options       []Option // max:64
 }
 
+type DownloadProgressMessage struct {
+	Folder  string // max:64
+	Updates []FileDownloadProgressUpdate
+	Flags   uint32
+	Options []Option // max:64
+}
+
 func (o *ClusterConfigMessage) GetOption(key string) string {
 	for _, option := range o.Options {
 		if option.Key == key {
@@ -137,6 +144,12 @@ type Device struct {
 	MaxLocalVersion int64
 	Flags           uint32
 	Options         []Option // max:64
+}
+
+type FileDownloadProgressUpdate struct {
+	Name       string      // max:8192
+	Blocks     []BlockInfo // max:1000000
+	UpdateType uint32
 }
 
 type Option struct {

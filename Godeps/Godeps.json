@@ -39,7 +39,7 @@
 		},
 		{
 			"ImportPath": "github.com/syncthing/protocol",
-			"Rev": "68c5dcd83d9be8f28ae59e951a87cdcf01c6f5cb"
+			"Rev": "c9db978115dac153d97a94b66f3d10589241dd54"
 		},
 		{
 			"ImportPath": "github.com/syncthing/relaysrv/client",
