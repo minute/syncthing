@@ -983,8 +983,7 @@ func (p *rwFolder) handleFile(file protocol.FileInfo, copyChan chan<- copyBlocks
 	tempName := filepath.Join(p.dir, defTempNamer.TempName(file.Name))
 	realName := filepath.Join(p.dir, file.Name)
 
-	reused := 0
-	var blocks []protocol.BlockInfo
+	var blocks, reused []protocol.BlockInfo
 
 	// Check for an old temporary file which might have some blocks we could
 	// reuse.
@@ -1004,13 +1003,14 @@ func (p *rwFolder) handleFile(file protocol.FileInfo, copyChan chan<- copyBlocks
 			_, ok := existingBlocks[block.String()]
 			if !ok {
 				blocks = append(blocks, block)
+			} else {
+				reused = append(reused, block)
 			}
 		}
 
 		// The sharedpullerstate will know which flags to use when opening the
 		// temp file depending if we are reusing any blocks or not.
-		reused = len(file.Blocks) - len(blocks)
-		if reused == 0 {
+		if len(reused) == 0 {
 			// Otherwise, discard the file ourselves in order for the
 			// sharedpuller not to panic when it fails to exclusively create a
 			// file which already exists
@@ -1021,16 +1021,18 @@ func (p *rwFolder) handleFile(file protocol.FileInfo, copyChan chan<- copyBlocks
 	}
 
 	s := sharedPullerState{
-		file:        file,
-		folder:      p.folder,
-		tempName:    tempName,
-		realName:    realName,
-		copyTotal:   len(blocks),
-		copyNeeded:  len(blocks),
-		reused:      reused,
-		ignorePerms: p.ignorePermissions(file),
-		version:     curFile.Version,
-		mut:         sync.NewMutex(),
+		file:             file,
+		folder:           p.folder,
+		tempName:         tempName,
+		realName:         realName,
+		copyTotal:        len(blocks),
+		copyNeeded:       len(blocks),
+		reused:           len(reused),
+		available:        reused,
+		availableUpdated: time.Now(),
+		ignorePerms:      p.ignorePermissions(file),
+		version:          curFile.Version,
+		mut:              sync.NewRWMutex(),
 	}
 
 	if debug {
@@ -1170,7 +1172,7 @@ func (p *rwFolder) copierRoutine(in <-chan copyBlocksState, pullChan chan<- pull
 				}
 				pullChan <- ps
 			} else {
-				state.copyDone()
+				state.copyDone(block)
 			}
 		}
 		out <- state.sharedPullerState
@@ -1238,7 +1240,7 @@ func (p *rwFolder) pullerRoutine(in <-chan pullBlockState, out chan<- *sharedPul
 			if err != nil {
 				state.fail("save", err)
 			} else {
-				state.pullDone()
+				state.pullDone(state.block)
 			}
 			break
 		}
