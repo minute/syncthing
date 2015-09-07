@@ -730,8 +730,8 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 		return protocol.ErrNoSuchFile
 	}
 
-	if flags != 0 {
-		// We don't currently support or expect any flags.
+	if flags != 0 && flags != protocol.FlagFromTemporary {
+		// We currently support only no flags, or FromTemporary flag.
 		return fmt.Errorf("protocol error: unknown flags 0x%x in Request message", flags)
 	}
 
@@ -747,7 +747,11 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 	validated := m.reqValidationCache[folder+"/"+name]
 	m.rvmut.RUnlock()
 
-	if time.Since(validated) > reqValidationTime {
+	if flags&protocol.FlagFromTemporary == protocol.FlagFromTemporary {
+		// No validation for temporary files, as they don't yet exist in the index.
+		// Convert the name to a local temp name
+		name = defTempNamer.TempName(name)
+	} else if time.Since(validated) > reqValidationTime {
 		m.fmut.RLock()
 		folderFiles, ok := m.folderFiles[folder]
 		m.fmut.RUnlock()
@@ -807,7 +811,7 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 	}
 
 	if debug && deviceID != protocol.LocalDeviceID {
-		l.Debugf("%v REQ(in): %s: %q / %q o=%d s=%d", m, deviceID, folder, name, offset, len(buf))
+		l.Debugf("%v REQ(in): %s: %q / %q o=%d s=%d f=%d", m, deviceID, folder, name, offset, len(buf), flags)
 	}
 	m.fmut.RLock()
 	fn := filepath.Join(m.folderCfgs[folder].Path(), name)
