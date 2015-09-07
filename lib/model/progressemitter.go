@@ -9,7 +9,6 @@ package model
 import (
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
@@ -18,10 +17,10 @@ import (
 )
 
 type ProgressEmitter struct {
-	registry map[string]*sharedPullerState
-	interval time.Duration
-	last     map[string]map[string]*pullerProgress
-	mut      sync.Mutex
+	registry   map[string]*sharedPullerState
+	interval   time.Duration
+	lastUpdate time.Time
+	mut        sync.Mutex
 
 	timer *time.Timer
 
@@ -34,7 +33,6 @@ func NewProgressEmitter(cfg *config.Wrapper) *ProgressEmitter {
 	t := &ProgressEmitter{
 		stop:     make(chan struct{}),
 		registry: make(map[string]*sharedPullerState),
-		last:     make(map[string]map[string]*pullerProgress),
 		timer:    time.NewTimer(time.Millisecond),
 		mut:      sync.NewMutex(),
 	}
@@ -60,22 +58,32 @@ func (t *ProgressEmitter) Serve() {
 			if debug {
 				l.Debugln("progress emitter: timer - looking after", len(t.registry))
 			}
-			output := make(map[string]map[string]*pullerProgress)
+
+			newLastUpdated := t.lastUpdate
 			for _, puller := range t.registry {
-				if output[puller.folder] == nil {
-					output[puller.folder] = make(map[string]*pullerProgress)
+				updated := puller.Updated()
+				if updated.After(newLastUpdated) {
+					newLastUpdated = updated
 				}
-				output[puller.folder][puller.file.Name] = puller.Progress()
 			}
-			if !reflect.DeepEqual(t.last, output) {
+
+			if !newLastUpdated.Equal(t.lastUpdate) {
+				t.lastUpdate = newLastUpdated
+				output := make(map[string]map[string]*pullerProgress)
+				for _, puller := range t.registry {
+					if output[puller.folder] == nil {
+						output[puller.folder] = make(map[string]*pullerProgress)
+					}
+					output[puller.folder][puller.file.Name] = puller.Progress()
+				}
 				events.Default.Log(events.DownloadProgress, output)
-				t.last = output
 				if debug {
 					l.Debugf("progress emitter: emitting %#v", output)
 				}
 			} else if debug {
 				l.Debugln("progress emitter: nothing new")
 			}
+
 			if len(t.registry) != 0 {
 				t.timer.Reset(t.interval)
 			}
@@ -115,6 +123,7 @@ func (t *ProgressEmitter) Register(s *sharedPullerState) {
 	if debug {
 		l.Debugln("progress emitter: registering", s.folder, s.file.Name)
 	}
+	t.lastUpdate = time.Time{}
 	if len(t.registry) == 0 {
 		t.timer.Reset(t.interval)
 	}
@@ -125,6 +134,7 @@ func (t *ProgressEmitter) Register(s *sharedPullerState) {
 func (t *ProgressEmitter) Deregister(s *sharedPullerState) {
 	t.mut.Lock()
 	defer t.mut.Unlock()
+	t.lastUpdate = time.Time{}
 	if debug {
 		l.Debugln("progress emitter: deregistering", s.folder, s.file.Name)
 	}
