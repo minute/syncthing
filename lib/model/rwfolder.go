@@ -1197,13 +1197,13 @@ func (p *rwFolder) pullerRoutine(in <-chan pullBlockState, out chan<- *sharedPul
 		}
 
 		var lastError error
-		potentialDevices := p.model.Availability(p.folder, state.file.Name)
+		potentialDevices := p.model.Availability(p.folder, state.file.Name, state.block)
 		for {
 			// Select the least busy device to pull the block from. If we found no
 			// feasible device at all, fail the block (and in the long run, the
 			// file).
-			selected := activity.leastBusy(potentialDevices)
-			if selected == (protocol.DeviceID{}) {
+			selected, found := activity.leastBusy(potentialDevices)
+			if !found {
 				if lastError != nil {
 					state.fail("pull", lastError)
 				} else {
@@ -1217,7 +1217,7 @@ func (p *rwFolder) pullerRoutine(in <-chan pullBlockState, out chan<- *sharedPul
 			// Fetch the block, while marking the selected device as in use so that
 			// leastBusy can select another device when someone else asks.
 			activity.using(selected)
-			buf, lastError := p.model.requestGlobal(selected, p.folder, state.file.Name, state.block.Offset, int(state.block.Size), state.block.Hash, 0, nil)
+			buf, lastError := p.model.requestGlobal(selected.ID, p.folder, state.file.Name, state.block.Offset, int(state.block.Size), state.block.Hash, selected.Flags, nil)
 			activity.done(selected)
 			if lastError != nil {
 				if debug {
@@ -1478,14 +1478,14 @@ func invalidateFolder(cfg *config.Configuration, folderID string, err error) {
 	}
 }
 
-func removeDevice(devices []protocol.DeviceID, device protocol.DeviceID) []protocol.DeviceID {
-	for i := range devices {
-		if devices[i] == device {
-			devices[i] = devices[len(devices)-1]
-			return devices[:len(devices)-1]
+func removeDevice(infos []AvailabilityInfo, info AvailabilityInfo) []AvailabilityInfo {
+	for i := range infos {
+		if infos[i] == info {
+			infos[i] = infos[len(infos)-1]
+			return infos[:len(infos)-1]
 		}
 	}
-	return devices
+	return infos
 }
 
 func moveForConflict(name string) error {
