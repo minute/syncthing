@@ -69,17 +69,7 @@ func (t *ProgressEmitter) Serve() {
 
 			if !newLastUpdated.Equal(t.lastUpdate) {
 				t.lastUpdate = newLastUpdated
-				output := make(map[string]map[string]*pullerProgress)
-				for _, puller := range t.registry {
-					if output[puller.folder] == nil {
-						output[puller.folder] = make(map[string]*pullerProgress)
-					}
-					output[puller.folder][puller.file.Name] = puller.Progress()
-				}
-				events.Default.Log(events.DownloadProgress, output)
-				if debug {
-					l.Debugf("progress emitter: emitting %#v", output)
-				}
+				t.sendDownloadProgressEvent()
 			} else if debug {
 				l.Debugln("progress emitter: nothing new")
 			}
@@ -89,6 +79,21 @@ func (t *ProgressEmitter) Serve() {
 			}
 			t.mut.Unlock()
 		}
+	}
+}
+
+func (t *ProgressEmitter) sendDownloadProgressEvent() {
+	// registry lock already held
+	output := make(map[string]map[string]*pullerProgress)
+	for _, puller := range t.registry {
+		if output[puller.folder] == nil {
+			output[puller.folder] = make(map[string]*pullerProgress)
+		}
+		output[puller.folder][puller.file.Name] = puller.Progress()
+	}
+	events.Default.Log(events.DownloadProgress, output)
+	if debug {
+		l.Debugf("progress emitter: emitting %#v", output)
 	}
 }
 
