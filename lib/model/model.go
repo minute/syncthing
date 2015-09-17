@@ -121,7 +121,6 @@ func NewModel(cfg *config.Wrapper, id protocol.DeviceID, deviceName, clientName,
 		cfg:                cfg,
 		db:                 ldb,
 		finder:             db.NewBlockFinder(ldb),
-		progressEmitter:    NewProgressEmitter(cfg),
 		id:                 id,
 		shortID:            id.Short(),
 		cacheIgnoredFiles:  cfg.Options().CacheIgnoredFiles,
@@ -146,6 +145,7 @@ func NewModel(cfg *config.Wrapper, id protocol.DeviceID, deviceName, clientName,
 		pmut:  sync.NewRWMutex(),
 		rvmut: sync.NewRWMutex(),
 	}
+	m.progressEmitter = NewProgressEmitter(cfg, m)
 	if cfg.Options().ProgressUpdateIntervalS > -1 {
 		go m.progressEmitter.Serve()
 	}
@@ -1024,6 +1024,21 @@ func (m *Model) IsPaused(device protocol.DeviceID) bool {
 	paused := m.devicePaused[device]
 	m.pmut.Unlock()
 	return paused
+}
+
+func (m *Model) FolderConnections() map[string][]Connection {
+	m.pmut.RLock()
+	defer m.pmut.RUnlock()
+	result := make(map[string][]Connection, len(m.folderDevices))
+	for folder, devices := range m.folderDevices {
+		conns := make([]Connection, 0, len(devices))
+		for _, device := range devices {
+			conns = append(conns, m.conn[device])
+		}
+		result[folder] = conns
+
+	}
+	return result
 }
 
 func (m *Model) deviceStatRef(deviceID protocol.DeviceID) *stats.DeviceStatisticsReference {
