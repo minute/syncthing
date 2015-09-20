@@ -743,6 +743,40 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 		return fmt.Errorf("protocol error: unknown flags 0x%x in Request message", flags)
 	}
 
+	if debug && deviceID != protocol.LocalDeviceID {
+		l.Debugf("%v REQ(in): %s: %q / %q o=%d s=%d f=%d", m, deviceID, folder, name, offset, len(buf), flags)
+	}
+
+	if flags == protocol.FlagFromTemporary {
+		err := m.requestFromTemporaryFile(deviceID, folder, name, offset, buf)
+		if err == nil || !os.IsNotExist(err) {
+			return err
+		}
+	}
+
+	return m.requestFromFile(deviceID, folder, name, offset, buf)
+}
+
+func (m *Model) requestFromTemporaryFile(deviceID protocol.DeviceID, folder, name string, offset int64, buf []byte) error {
+	name = defTempNamer.TempName(name)
+
+	m.fmut.RLock()
+	fn := filepath.Join(m.folderCfgs[folder].Path(), name)
+	m.fmut.RUnlock()
+
+	// Cannot easily cache fd's because we might need to delete the file
+	// at any moment.
+	reader, err := os.Open(fn)
+	if err != nil {
+		return err
+	}
+
+	_, err = reader.ReadAt(buf, offset)
+	reader.Close()
+	return err
+}
+
+func (m *Model) requestFromFile(deviceID protocol.DeviceID, folder, name string, offset int64, buf []byte) error {
 	// Verify that the requested file exists in the local model. We only need
 	// to validate this file if we haven't done so recently, so we keep a
 	// cache of successfull results. "Recently" can be quite a long time, as
@@ -755,11 +789,7 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 	validated := m.reqValidationCache[folder+"/"+name]
 	m.rvmut.RUnlock()
 
-	if flags&protocol.FlagFromTemporary == protocol.FlagFromTemporary {
-		// No validation for temporary files, as they don't yet exist in the index.
-		// Convert the name to a local temp name
-		name = defTempNamer.TempName(name)
-	} else if time.Since(validated) > reqValidationTime {
+	if time.Since(validated) > reqValidationTime {
 		m.fmut.RLock()
 		folderFiles, ok := m.folderFiles[folder]
 		m.fmut.RUnlock()
@@ -818,9 +848,6 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 		m.rvmut.Unlock()
 	}
 
-	if debug && deviceID != protocol.LocalDeviceID {
-		l.Debugf("%v REQ(in): %s: %q / %q o=%d s=%d f=%d", m, deviceID, folder, name, offset, len(buf), flags)
-	}
 	m.fmut.RLock()
 	fn := filepath.Join(m.folderCfgs[folder].Path(), name)
 	m.fmut.RUnlock()
@@ -845,11 +872,7 @@ func (m *Model) Request(deviceID protocol.DeviceID, folder, name string, offset 
 	}
 
 	_, err = reader.ReadAt(buf, offset)
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return err
 }
 
 func (m *Model) CurrentFolderFile(folder string, file string) (protocol.FileInfo, bool) {
