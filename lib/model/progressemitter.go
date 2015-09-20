@@ -138,10 +138,7 @@ func (t *ProgressEmitter) sendDownloadProgressMessages() {
 			// For every existing puller, it will check for new blocks, and send update for the new blocks only
 			// For every puller that we've seen before but is no longer there, we will send a forget message
 			updates := state.update(folder, activePullers)
-
-			if len(updates) > 0 {
-				conn.DownloadProgress(folder, updates, 0, nil)
-			}
+			batchSend(conn, folder, updates)
 		}
 
 		// Clean up sentDownloadStates for devices which we are no longer connected to.
@@ -172,9 +169,7 @@ func (t *ProgressEmitter) sendDownloadProgressMessages() {
 			// and return us a list of updates which would clean up the state
 			// on the remote end.
 			updates := state.cleanup(folder)
-			if len(updates) > 0 {
-				deviceConns[id].DownloadProgress(folder, updates, 0, nil)
-			}
+			batchSend(deviceConns[id], folder, updates)
 		}
 	}
 }
@@ -246,4 +241,36 @@ func (t *ProgressEmitter) BytesCompleted(folder string) (bytes int64) {
 
 func (t *ProgressEmitter) String() string {
 	return fmt.Sprintf("ProgressEmitter@%p", t)
+}
+
+func batchSend(conn protocol.Connection, folder string, updates []protocol.FileDownloadProgressUpdate) {
+	blocksLeft := indexTargetSize / indexPerBlockSize
+	var currentBatch []protocol.FileDownloadProgressUpdate
+
+	for _, update := range updates {
+		blocks := len(update.Blocks)
+		if blocks <= blocksLeft {
+			currentBatch = append(currentBatch, update)
+			blocksLeft -= len(update.Blocks)
+		} else {
+			currentBatch = append(currentBatch, protocol.FileDownloadProgressUpdate{
+				Name:       update.Name,
+				UpdateType: update.UpdateType,
+				Blocks:     update.Blocks[:blocksLeft],
+			})
+
+			conn.DownloadProgress(folder, currentBatch, 0, nil)
+
+			currentBatch = append(currentBatch[:0], protocol.FileDownloadProgressUpdate{
+				Name:       update.Name,
+				UpdateType: update.UpdateType,
+				Blocks:     update.Blocks[blocksLeft:],
+			})
+			blocksLeft = (indexTargetSize / indexPerBlockSize) - (blocks - blocksLeft)
+		}
+	}
+
+	if len(currentBatch) > 0 {
+		conn.DownloadProgress(folder, currentBatch, 0, nil)
+	}
 }
