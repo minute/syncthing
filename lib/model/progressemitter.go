@@ -26,6 +26,7 @@ type ProgressEmitter struct {
 	interval           time.Duration
 	lastUpdate         time.Time
 	sentDownloadStates map[protocol.DeviceID]sentDownloadState // States representing what we've sent to the other peer via DownloadProgress messages.
+	sendTempIndexes    bool
 	mut                sync.Mutex
 
 	timer              *time.Timer
@@ -79,7 +80,9 @@ func (t *ProgressEmitter) Serve() {
 			if !newLastUpdated.Equal(t.lastUpdate) {
 				t.lastUpdate = newLastUpdated
 				t.sendDownloadProgressEvent()
-				t.sendDownloadProgressMessages()
+				if t.sendTempIndexes {
+					t.sendDownloadProgressMessages()
+				}
 			} else if debug {
 				l.Debugln("progress emitter: nothing new")
 			}
@@ -184,9 +187,10 @@ func (t *ProgressEmitter) CommitConfiguration(from, to config.Configuration) boo
 	t.mut.Lock()
 	defer t.mut.Unlock()
 
+	t.sendTempIndexes = to.Options.SendTempIndexes
 	t.interval = time.Duration(to.Options.ProgressUpdateIntervalS) * time.Second
 	if debug {
-		l.Debugln("progress emitter: updated interval", t.interval)
+		l.Debugln("progress emitter: updated interval", t.interval, "sendTempIndexes", t.sendTempIndexes)
 	}
 
 	return true

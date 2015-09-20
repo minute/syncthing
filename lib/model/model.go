@@ -1018,7 +1018,7 @@ func (m *Model) PauseDevice(device protocol.DeviceID) {
 }
 
 func (m *Model) DownloadProgress(device protocol.DeviceID, folder string, updates []protocol.FileDownloadProgressUpdate, flags uint32, options []protocol.Option) {
-	if !m.folderSharedWith(folder, device) {
+	if !m.folderSharedWith(folder, device) || !m.cfg.Options().ReceiveTempIndexes {
 		return
 	}
 
