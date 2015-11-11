@@ -8,20 +8,25 @@ package db_test
 
 import (
 	"bytes"
+	"flag"
 	"fmt"
+	"os"
 	"reflect"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/protocol"
 )
 
 var remoteDevice0, remoteDevice1 protocol.DeviceID
+var files int
 
 func init() {
 	remoteDevice0, _ = protocol.DeviceIDFromString("AIR6LPZ-7K4PTTV-UXQSMUU-CPQ5YWH-OEDFIIQ-JUG777G-2YQXXR5-YD6AWQR")
 	remoteDevice1, _ = protocol.DeviceIDFromString("I6KAH76-66SLLLB-5PFXSOA-UFJCDZC-YAOMLEK-CP2GB32-BV5RQST-3PSROAU")
+	flag.IntVar(&files, "files", 1, "Number of files")
 }
 
 const myID = 1
@@ -619,4 +624,32 @@ func TestLongPath(t *testing.T) {
 		t.Errorf("Incorrect long filename;\n%q !=\n%q",
 			gf[0].Name, local[0].Name)
 	}
+}
+
+func TestBenchmarkLargeInsert(t *testing.T) {
+	if testing.Short() {
+		t.Skip("slow test")
+		return
+	}
+
+	os.RemoveAll("testdata/largedb")
+	ldb, err := db.Open("testdata/largedb")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ldb.Close()
+	defer os.RemoveAll("testdata/largedb")
+	fs := db.NewFileSet("default", ldb)
+
+	nBlocksPerFile := 500000 // About 60 GB per file
+	t0 := time.Now()
+	for i := 0; i < files; i++ {
+		fs.Update(protocol.LocalDeviceID, []protocol.FileInfo{
+			protocol.FileInfo{
+				Name:   fmt.Sprintf("124EEA14-8D4A-4A55-8A11-EACC78375B0A/124EEA14-8D4A-4A55-8A11-EACC78375B0A/file%d.ext", i),
+				Blocks: genBlocks(nBlocksPerFile),
+			},
+		})
+	}
+	fmt.Println(time.Since(t0))
 }
