@@ -283,10 +283,18 @@ func TestCommentsAndBlankLines(t *testing.T) {
 
 var result bool
 
-func BenchmarkMatch(b *testing.B) {
+func BenchmarkMatchHit(b *testing.B) {
+	benchmarkMatchFilename(b, ".dolphin/shark")
+}
+
+func BenchmarkMatchMiss(b *testing.B) {
+	benchmarkMatchFilename(b, "a/representatively/long/path/to/a/file.txt")
+}
+
+func benchmarkMatchFilename(b *testing.B, name string) {
 	stignore := `
-.frog
-.frog*
+/.frog
+/.frog*
 .frogfox
 .whale
 .whale/*
@@ -294,9 +302,9 @@ func BenchmarkMatch(b *testing.B) {
 .dolphin/*
 ~ferret~.*
 .ferret.*
-flamingo.*
-flamingo
-*.crow
+(?i)flamingo.*
+!flamingo
+!*.crow
 *.crow
 	`
 	pats := New(false)
@@ -307,7 +315,7 @@ flamingo
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		result = pats.Match("filename")
+		result = pats.Match(name)
 	}
 }
 

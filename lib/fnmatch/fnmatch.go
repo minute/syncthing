@@ -17,6 +17,8 @@ const (
 	NoEscape = (1 << iota)
 	PathName
 	CaseFold
+	NoAnchorStart
+	NoAnchorEnd
 )
 
 func Convert(pattern string, flags int) (*regexp.Regexp, error) {
@@ -61,7 +63,12 @@ func Convert(pattern string, flags int) (*regexp.Regexp, error) {
 	pattern = strings.Replace(pattern, `[:escapedques:]`, `\?`, -1)
 	pattern = strings.Replace(pattern, `[:escapeddot:]`, `\.`, -1)
 
-	pattern = `^` + pattern + `$`
+	if flags&NoAnchorStart == 0 {
+		pattern = `^` + pattern
+	}
+	if flags&NoAnchorEnd == 0 {
+		pattern = pattern + `$`
+	}
 	if flags&CaseFold != 0 {
 		pattern = `(?i)` + pattern
 	}

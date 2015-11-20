@@ -199,14 +199,14 @@ func loadIgnoreFile(file string, seen map[string]bool) ([]Pattern, error) {
 func parseIgnoreFile(fd io.Reader, currentFile string, seen map[string]bool) ([]Pattern, error) {
 	var patterns []Pattern
 
-	addPattern := func(line string) error {
+	addPattern := func(line string, flags int) error {
 		include := true
 		if strings.HasPrefix(line, "!") {
 			line = line[1:]
 			include = false
 		}
 
-		flags := fnmatch.PathName
+		flags |= fnmatch.PathName
 		if strings.HasPrefix(line, "(?i)") {
 			line = line[4:]
 			flags |= fnmatch.CaseFold
@@ -268,19 +268,13 @@ func parseIgnoreFile(fd io.Reader, currentFile string, seen map[string]bool) ([]
 		case strings.HasPrefix(line, "//"):
 			continue
 		case strings.HasPrefix(line, "#"):
-			err = addPattern(line)
+			err = addPattern(line, 0)
 		case strings.HasSuffix(line, "/**"):
-			err = addPattern(line)
+			err = addPattern(line, 0)
 		case strings.HasSuffix(line, "/"):
-			err = addPattern(line)
-			if err == nil {
-				err = addPattern(line + "**")
-			}
+			err = addPattern(line, fnmatch.NoAnchorEnd)
 		default:
-			err = addPattern(line)
-			if err == nil {
-				err = addPattern(line + "/**")
-			}
+			err = addPattern(line, fnmatch.NoAnchorEnd)
 		}
 		if err != nil {
 			return nil, err
