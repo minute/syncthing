@@ -37,7 +37,16 @@ var (
 	version   string
 	goVersion float64
 	race      bool
+	workDir   string
 )
+
+func init() {
+	wd, err := os.Getwd()
+	if err != nil {
+		log.Fatalln("Can't determine current dir:", err)
+	}
+	workDir = wd
+}
 
 const minGoVersion = 1.3
 
@@ -46,11 +55,7 @@ func main() {
 	log.SetFlags(0)
 
 	if os.Getenv("GOPATH") == "" {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-		gopath := filepath.Clean(filepath.Join(cwd, "../../../../"))
+		gopath := filepath.Clean(filepath.Join(workDir, "../../../../"))
 		log.Println("GOPATH is", gopath)
 		os.Setenv("GOPATH", gopath)
 	}
@@ -100,12 +105,11 @@ func main() {
 			install(pkg, tags)
 
 		case "build":
-			pkg := "./cmd/syncthing"
 			var tags []string
 			if noupgrade {
 				tags = []string{"noupgrade"}
 			}
-			build(pkg, tags)
+			build(tags)
 
 		case "test":
 			test("./...")
@@ -124,9 +128,6 @@ func main() {
 
 		case "transifex":
 			transifex()
-
-		case "deps":
-			deps()
 
 		case "tar":
 			buildTar()
@@ -195,11 +196,7 @@ func bench(pkg string) {
 }
 
 func install(pkg string, tags []string) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	os.Setenv("GOBIN", filepath.Join(cwd, "bin"))
+	os.Setenv("GOBIN", filepath.Join(workDir, "bin"))
 	args := []string{"install", "-v", "-ldflags", ldflags()}
 	if len(tags) > 0 {
 		args = append(args, "-tags", strings.Join(tags, ","))
@@ -212,21 +209,21 @@ func install(pkg string, tags []string) {
 	runPrint("go", args...)
 }
 
-func build(pkg string, tags []string) {
-	binary := "syncthing"
+func build(tags []string) {
+	binary := "bin/syncthing"
 	if goos == "windows" {
 		binary += ".exe"
 	}
 
 	rmr(binary)
-	args := []string{"build", "-i", "-v", "-ldflags", ldflags()}
+	args := []string{"build", "-i", "-v", "-ldflags", ldflags(), "-o", binary}
 	if len(tags) > 0 {
 		args = append(args, "-tags", strings.Join(tags, ","))
 	}
 	if race {
 		args = append(args, "-race")
 	}
-	args = append(args, pkg)
+	args = append(args, "./cmd/syncthing")
 	setBuildEnv()
 	runPrint("go", args...)
 }
@@ -238,13 +235,13 @@ func buildTar() {
 		tags = []string{"noupgrade"}
 		name += "-noupgrade"
 	}
-	build("./cmd/syncthing", tags)
+	build(tags)
 	filename := name + ".tar.gz"
 	files := []archiveFile{
 		{src: "README.md", dst: name + "/README.txt"},
 		{src: "LICENSE", dst: name + "/LICENSE.txt"},
 		{src: "AUTHORS", dst: name + "/AUTHORS.txt"},
-		{src: "syncthing", dst: name + "/syncthing"},
+		{src: "bin/syncthing", dst: name + "/syncthing"},
 	}
 
 	for _, file := range listFiles("etc") {
@@ -265,13 +262,13 @@ func buildZip() {
 		tags = []string{"noupgrade"}
 		name += "-noupgrade"
 	}
-	build("./cmd/syncthing", tags)
+	build(tags)
 	filename := name + ".zip"
 	files := []archiveFile{
 		{src: "README.md", dst: name + "/README.txt"},
 		{src: "LICENSE", dst: name + "/LICENSE.txt"},
 		{src: "AUTHORS", dst: name + "/AUTHORS.txt"},
-		{src: "syncthing.exe", dst: name + "/syncthing.exe"},
+		{src: "bin/syncthing.exe", dst: name + "/syncthing.exe"},
 	}
 
 	for _, file := range listFiles("extra") {
@@ -296,7 +293,7 @@ func buildDeb() {
 		goarch = "arm"
 	}
 
-	build("./cmd/syncthing", []string{"noupgrade"})
+	build([]string{"noupgrade"})
 
 	files := []archiveFile{
 		{src: "README.md", dst: "deb/usr/share/doc/syncthing/README.txt", perm: 0644},
@@ -390,13 +387,7 @@ func listFiles(dir string) []string {
 func setBuildEnv() {
 	os.Setenv("GOOS", goos)
 	os.Setenv("GOARCH", goarch)
-	wd, err := os.Getwd()
-	if err != nil {
-		log.Println("Warning: can't determine current dir:", err)
-		log.Println("Build might not work as expected")
-	}
-	os.Setenv("GOPATH", fmt.Sprintf("%s%c%s", filepath.Join(wd, "Godeps", "_workspace"), os.PathListSeparator, os.Getenv("GOPATH")))
-	log.Println("GOPATH=" + os.Getenv("GOPATH"))
+	os.Setenv("GO15VENDOREXPERIMENT", "1")
 }
 
 func assets() {
@@ -426,14 +417,14 @@ func transifex() {
 	assets()
 }
 
-func deps() {
-	rmr("Godeps")
-	runPrint("godep", "save", "./cmd/...")
-}
-
 func clean() {
-	rmr("bin", "Godeps/_workspace/pkg", "Godeps/_workspace/bin")
-	rmr(filepath.Join(os.Getenv("GOPATH"), fmt.Sprintf("pkg/%s_%s/github.com/syncthing", goos, goarch)))
+	rmr("bin")
+	gopath := os.Getenv("GOPATH")
+	for _, goos := range []string{"darwin", "freebsd", "linux", "netbsd", "openbsd", "windows", "dragonfly", "solaris"} {
+		for _, goarch := range []string{"386", "amd64", "arm"} {
+			rmr(filepath.Join(gopath, fmt.Sprintf("pkg/%s_%s/github.com/syncthing", goos, goarch)))
+		}
+	}
 }
 
 func ldflags() string {
