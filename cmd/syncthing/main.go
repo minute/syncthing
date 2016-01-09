@@ -21,7 +21,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"regexp"
 	"runtime"
 	"runtime/pprof"
 	"sort"
@@ -44,20 +43,9 @@ import (
 	"github.com/syncthing/syncthing/lib/symlinks"
 	"github.com/syncthing/syncthing/lib/tlsutil"
 	"github.com/syncthing/syncthing/lib/upgrade"
+	"github.com/syncthing/syncthing/lib/version"
 
 	"github.com/thejerf/suture"
-)
-
-var (
-	Version     = "unknown-dev"
-	Codename    = "Beryllium Bedbug"
-	BuildStamp  = "0"
-	BuildDate   time.Time
-	BuildHost   = "unknown"
-	BuildUser   = "unknown"
-	IsRelease   bool
-	IsBeta      bool
-	LongVersion string
 )
 
 const (
@@ -85,32 +73,6 @@ const (
 	ipv4LocalDiscoveryPriority
 	globalDiscoveryPriority
 )
-
-func init() {
-	if Version != "unknown-dev" {
-		// If not a generic dev build, version string should come from git describe
-		exp := regexp.MustCompile(`^v\d+\.\d+\.\d+(-[a-z0-9]+)*(\+\d+-g[0-9a-f]+)?(-dirty)?$`)
-		if !exp.MatchString(Version) {
-			l.Fatalf("Invalid version string %q;\n\tdoes not match regexp %v", Version, exp)
-		}
-	}
-
-	// Check for a clean release build. A release is something like "v0.1.2",
-	// with an optional suffix of letters and dot separated numbers like
-	// "-beta3.47". If there's more stuff, like a plus sign and a commit hash
-	// and so on, then it's not a release. If there's a dash anywhere in
-	// there, it's some kind of beta or prerelease version.
-
-	exp := regexp.MustCompile(`^v\d+\.\d+\.\d+(-[a-z]+[\d\.]+)?$`)
-	IsRelease = exp.MatchString(Version)
-	IsBeta = strings.Contains(Version, "-")
-
-	stamp, _ := strconv.Atoi(BuildStamp)
-	BuildDate = time.Unix(int64(stamp), 0)
-
-	date := BuildDate.UTC().Format("2006-01-02 15:04:05 MST")
-	LongVersion = fmt.Sprintf(`syncthing %s "%s" (%s %s-%s) %s@%s %s`, Version, Codename, runtime.Version(), runtime.GOOS, runtime.GOARCH, BuildUser, BuildHost, date)
-}
 
 var (
 	myID protocol.DeviceID
@@ -311,7 +273,7 @@ func main() {
 	}
 
 	if options.showVersion {
-		fmt.Println(LongVersion)
+		fmt.Println(version.LongVersion)
 		return
 	}
 
@@ -434,18 +396,18 @@ func debugFacilities() string {
 func checkUpgrade() upgrade.Release {
 	cfg, _ := loadConfig()
 	releasesURL := cfg.Options().ReleasesURL
-	release, err := upgrade.LatestRelease(releasesURL, Version)
+	release, err := upgrade.LatestRelease(releasesURL, version.Version)
 	if err != nil {
 		l.Fatalln("Upgrade:", err)
 	}
 
-	if upgrade.CompareVersions(release.Tag, Version) <= 0 {
+	if upgrade.CompareVersions(release.Tag, version.Version) <= 0 {
 		noUpgradeMessage := "No upgrade available (current %q >= latest %q)."
-		l.Infof(noUpgradeMessage, Version, release.Tag)
+		l.Infof(noUpgradeMessage, version.Version, release.Tag)
 		os.Exit(exitNoUpgradeAvailable)
 	}
 
-	l.Infof("Upgrade available (current %q < latest %q)", Version, release.Tag)
+	l.Infof("Upgrade available (current %q < latest %q)", version.Version, release.Tag)
 	return release
 }
 
@@ -556,7 +518,7 @@ func syncthingMain(runtimeOptions RuntimeOptions) {
 	myID = protocol.NewDeviceID(cert.Certificate[0])
 	l.SetPrefix(fmt.Sprintf("[%s] ", myID.String()[:5]))
 
-	l.Infoln(LongVersion)
+	l.Infoln(version.LongVersion)
 	l.Infoln("My ID:", myID)
 	printHashRate()
 
@@ -660,7 +622,7 @@ func syncthingMain(runtimeOptions RuntimeOptions) {
 		l.Infoln("Compacting database:", err)
 	}
 
-	m := model.NewModel(cfg, myID, myDeviceName(cfg), "syncthing", Version, ldb, protectedFiles)
+	m := model.NewModel(cfg, myID, myDeviceName(cfg), "syncthing", version.Version, ldb, protectedFiles)
 	cfg.Subscribe(m)
 
 	if t := os.Getenv("STDEADLOCKTIMEOUT"); len(t) > 0 {
@@ -668,7 +630,7 @@ func syncthingMain(runtimeOptions RuntimeOptions) {
 		if err == nil {
 			m.StartDeadlockDetector(time.Duration(it) * time.Second)
 		}
-	} else if !IsRelease || IsBeta {
+	} else if !version.IsRelease || version.IsBeta {
 		m.StartDeadlockDetector(20 * time.Minute)
 	}
 
@@ -826,10 +788,10 @@ func syncthingMain(runtimeOptions RuntimeOptions) {
 	if opts.AutoUpgradeIntervalH > 0 {
 		if noUpgrade {
 			l.Infof("No automatic upgrades; STNOUPGRADE environment variable defined.")
-		} else if IsRelease {
+		} else if version.IsRelease {
 			go autoUpgrade(cfg)
 		} else {
-			l.Infof("No automatic upgrades; %s is not a release version.", Version)
+			l.Infof("No automatic upgrades; %s is not a release version.", version.Version)
 		}
 	}
 
@@ -1108,14 +1070,14 @@ func autoUpgrade(cfg *config.Wrapper) {
 		select {
 		case event := <-sub.C():
 			data, ok := event.Data.(map[string]string)
-			if !ok || data["clientName"] != "syncthing" || upgrade.CompareVersions(data["clientVersion"], Version) != upgrade.Newer {
+			if !ok || data["clientName"] != "syncthing" || upgrade.CompareVersions(data["clientVersion"], version.Version) != upgrade.Newer {
 				continue
 			}
-			l.Infof("Connected to device %s with a newer version (current %q < remote %q). Checking for upgrades.", data["id"], Version, data["clientVersion"])
+			l.Infof("Connected to device %s with a newer version (current %q < remote %q). Checking for upgrades.", data["id"], version.Version, data["clientVersion"])
 		case <-timer.C:
 		}
 
-		rel, err := upgrade.LatestRelease(cfg.Options().ReleasesURL, Version)
+		rel, err := upgrade.LatestRelease(cfg.Options().ReleasesURL, version.Version)
 		if err == upgrade.ErrUpgradeUnsupported {
 			events.Default.Unsubscribe(sub)
 			return
@@ -1128,13 +1090,13 @@ func autoUpgrade(cfg *config.Wrapper) {
 			continue
 		}
 
-		if upgrade.CompareVersions(rel.Tag, Version) != upgrade.Newer {
+		if upgrade.CompareVersions(rel.Tag, version.Version) != upgrade.Newer {
 			// Skip equal, older or majorly newer (incompatible) versions
 			timer.Reset(time.Duration(cfg.Options().AutoUpgradeIntervalH) * time.Hour)
 			continue
 		}
 
-		l.Infof("Automatic upgrade (current %q < latest %q)", Version, rel.Tag)
+		l.Infof("Automatic upgrade (current %q < latest %q)", version.Version, rel.Tag)
 		err = upgrade.To(rel)
 		if err != nil {
 			l.Warnln("Automatic upgrade:", err)

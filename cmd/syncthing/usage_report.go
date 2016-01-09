@@ -23,6 +23,7 @@ import (
 	"github.com/syncthing/syncthing/lib/model"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/upgrade"
+	"github.com/syncthing/syncthing/lib/version"
 	"github.com/thejerf/suture"
 )
 
@@ -83,8 +84,8 @@ func reportData(cfg *config.Wrapper, m *model.Model) map[string]interface{} {
 	res := make(map[string]interface{})
 	res["urVersion"] = usageReportVersion
 	res["uniqueID"] = cfg.Options().URUniqueID
-	res["version"] = Version
-	res["longVersion"] = LongVersion
+	res["version"] = version.Version
+	res["longVersion"] = version.LongVersion
 	res["platform"] = runtime.GOOS + "-" + runtime.GOARCH
 	res["numFolders"] = len(cfg.Folders())
 	res["numDevices"] = len(cfg.Devices())

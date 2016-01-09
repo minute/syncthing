@@ -39,6 +39,7 @@ import (
 	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/syncthing/syncthing/lib/tlsutil"
 	"github.com/syncthing/syncthing/lib/upgrade"
+	"github.com/syncthing/syncthing/lib/version"
 	"github.com/vitrun/qart/qr"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -364,7 +365,7 @@ func noCacheMiddleware(h http.Handler) http.Handler {
 
 func withDetailsMiddleware(id protocol.DeviceID, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("X-Syncthing-Version", Version)
+		w.Header().Set("X-Syncthing-Version", version.Version)
 		w.Header().Set("X-Syncthing-ID", id.String())
 		h.ServeHTTP(w, r)
 	})
@@ -376,9 +377,9 @@ func (s *apiService) restPing(w http.ResponseWriter, r *http.Request) {
 
 func (s *apiService) getSystemVersion(w http.ResponseWriter, r *http.Request) {
 	sendJSON(w, map[string]string{
-		"version":     Version,
-		"codename":    Codename,
-		"longVersion": LongVersion,
+		"version":     version.Version,
+		"codename":    version.Codename,
+		"longVersion": version.LongVersion,
 		"os":          runtime.GOOS,
 		"arch":        runtime.GOARCH,
 	})
@@ -832,16 +833,16 @@ func (s *apiService) getSystemUpgrade(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, upgrade.ErrUpgradeUnsupported.Error(), 500)
 		return
 	}
-	rel, err := upgrade.LatestRelease(s.cfg.Options().ReleasesURL, Version)
+	rel, err := upgrade.LatestRelease(s.cfg.Options().ReleasesURL, version.Version)
 	if err != nil {
 		http.Error(w, err.Error(), 500)
 		return
 	}
 	res := make(map[string]interface{})
-	res["running"] = Version
+	res["running"] = version.Version
 	res["latest"] = rel.Tag
-	res["newer"] = upgrade.CompareVersions(rel.Tag, Version) == upgrade.Newer
-	res["majorNewer"] = upgrade.CompareVersions(rel.Tag, Version) == upgrade.MajorNewer
+	res["newer"] = upgrade.CompareVersions(rel.Tag, version.Version) == upgrade.Newer
+	res["majorNewer"] = upgrade.CompareVersions(rel.Tag, version.Version) == upgrade.MajorNewer
 
 	sendJSON(w, res)
 }
@@ -873,14 +874,14 @@ func (s *apiService) getLang(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *apiService) postSystemUpgrade(w http.ResponseWriter, r *http.Request) {
-	rel, err := upgrade.LatestRelease(s.cfg.Options().ReleasesURL, Version)
+	rel, err := upgrade.LatestRelease(s.cfg.Options().ReleasesURL, version.Version)
 	if err != nil {
 		l.Warnln("getting latest release:", err)
 		http.Error(w, err.Error(), 500)
 		return
 	}
 
-	if upgrade.CompareVersions(rel.Tag, Version) > upgrade.Equal {
+	if upgrade.CompareVersions(rel.Tag, version.Version) > upgrade.Equal {
 		err = upgrade.To(rel)
 		if err != nil {
 			l.Warnln("upgrading:", err)

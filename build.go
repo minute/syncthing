@@ -444,10 +444,10 @@ func ldflags() string {
 
 	b := new(bytes.Buffer)
 	b.WriteString("-w")
-	fmt.Fprintf(b, " -X main.Version%c%s", sep, version)
-	fmt.Fprintf(b, " -X main.BuildStamp%c%d", sep, buildStamp())
-	fmt.Fprintf(b, " -X main.BuildUser%c%s", sep, buildUser())
-	fmt.Fprintf(b, " -X main.BuildHost%c%s", sep, buildHost())
+	fmt.Fprintf(b, " -X github.com/syncthing/syncthing/lib/version.Version%c%s", sep, version)
+	fmt.Fprintf(b, " -X github.com/syncthing/syncthing/lib/version.BuildStamp%c%d", sep, buildStamp())
+	fmt.Fprintf(b, " -X github.com/syncthing/syncthing/lib/version.BuildUser%c%s", sep, buildUser())
+	fmt.Fprintf(b, " -X github.com/syncthing/syncthing/lib/version.BuildHost%c%s", sep, buildHost())
 	return b.String()
 }
 
