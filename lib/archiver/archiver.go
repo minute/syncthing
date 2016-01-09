@@ -4,15 +4,15 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// Package versioner implements common interfaces for file versioning and a
+// Package archiver implements common interfaces for file versioning and a
 // simple default versioning scheme.
-package versioner
+package archiver
 
-type Versioner interface {
+type Archiver interface {
 	Archive(filePath string) error
 }
 
-var Factories = map[string]func(folderID string, folderDir string, params map[string]string) Versioner{}
+var Factories = map[string]func(folderID string, folderDir string, params map[string]string) Archiver{}
 
 const (
 	TimeFormat = "20060102-150405"

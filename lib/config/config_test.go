@@ -309,13 +309,13 @@ func TestDeviceAddressesStatic(t *testing.T) {
 	}
 }
 
-func TestVersioningConfig(t *testing.T) {
+func TestArchivngConfig(t *testing.T) {
 	cfg, err := Load("testdata/versioningconfig.xml", device4)
 	if err != nil {
 		t.Error(err)
 	}
 
-	vc := cfg.Folders()["test"].Versioning
+	vc := cfg.Folders()["test"].Archiving
 	if vc.Type != "simple" {
 		t.Errorf(`vc.Type %q != "simple"`, vc.Type)
 	}

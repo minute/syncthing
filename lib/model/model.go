@@ -22,6 +22,7 @@ import (
 	stdsync "sync"
 	"time"
 
+	"github.com/syncthing/syncthing/lib/archiver"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/events"
@@ -32,7 +33,6 @@ import (
 	"github.com/syncthing/syncthing/lib/stats"
 	"github.com/syncthing/syncthing/lib/symlinks"
 	"github.com/syncthing/syncthing/lib/sync"
-	"github.com/syncthing/syncthing/lib/versioner"
 	"github.com/thejerf/suture"
 )
 
@@ -166,21 +166,21 @@ func (m *Model) StartFolderRW(folder string) {
 	p := newRWFolder(m, m.shortID, cfg)
 	m.folderRunners[folder] = p
 
-	if len(cfg.Versioning.Type) > 0 {
-		factory, ok := versioner.Factories[cfg.Versioning.Type]
+	if len(cfg.Archiving.Type) > 0 {
+		factory, ok := archiver.Factories[cfg.Archiving.Type]
 		if !ok {
-			l.Fatalf("Requested versioning type %q that does not exist", cfg.Versioning.Type)
+			l.Fatalf("Requested versioning type %q that does not exist", cfg.Archiving.Type)
 		}
 
-		versioner := factory(folder, cfg.Path(), cfg.Versioning.Params)
-		if service, ok := versioner.(suture.Service); ok {
+		archiver := factory(folder, cfg.Path(), cfg.Archiving.Params)
+		if service, ok := archiver.(suture.Service); ok {
 			// The versioner implements the suture.Service interface, so
 			// expects to be run in the background in addition to being called
 			// when files are going to be archived.
 			token := m.Add(service)
 			m.folderRunnerTokens[folder] = append(m.folderRunnerTokens[folder], token)
 		}
-		p.versioner = versioner
+		p.archiver = archiver
 	}
 
 	m.warnAboutOverwritingProtectedFiles(folder)

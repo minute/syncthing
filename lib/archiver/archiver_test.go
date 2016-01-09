@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"io/ioutil"
@@ -47,7 +47,7 @@ func TestTaggedFilename(t *testing.T) {
 	}
 }
 
-func TestSimpleVersioningVersionCount(t *testing.T) {
+func TestSimpleArchivingVersionCount(t *testing.T) {
 	if testing.Short() {
 		t.Skip("Test takes some time, skipping.")
 	}

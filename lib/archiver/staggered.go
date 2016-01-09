@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"os"
@@ -34,7 +34,7 @@ type Staggered struct {
 	mutex         sync.Mutex
 }
 
-func NewStaggered(folderID, folderPath string, params map[string]string) Versioner {
+func NewStaggered(folderID, folderPath string, params map[string]string) Archiver {
 	maxAge, err := strconv.ParseInt(params["maxAge"], 10, 0)
 	if err != nil {
 		maxAge = 31536000 // Default: ~1 year
@@ -80,10 +80,10 @@ func NewStaggered(folderID, folderPath string, params map[string]string) Version
 }
 
 func (v Staggered) clean() {
-	l.Debugln("Versioner clean: Waiting for lock on", v.versionsPath)
+	l.Debugln("Archiver clean: Waiting for lock on", v.versionsPath)
 	v.mutex.Lock()
 	defer v.mutex.Unlock()
-	l.Debugln("Versioner clean: Cleaning", v.versionsPath)
+	l.Debugln("Archiver clean: Cleaning", v.versionsPath)
 
 	if _, err := os.Stat(v.versionsPath); os.IsNotExist(err) {
 		// There is no need to clean a nonexistent dir.
@@ -119,7 +119,7 @@ func (v Staggered) clean() {
 		return nil
 	})
 	if err != nil {
-		l.Warnln("Versioner: error scanning versions dir", err)
+		l.Warnln("Archiver: error scanning versions dir", err)
 		return
 	}
 
@@ -141,7 +141,7 @@ func (v Staggered) clean() {
 		l.Debugln("Cleaner: deleting empty directory", path)
 		err = os.Remove(path)
 		if err != nil {
-			l.Warnln("Versioner: can't remove directory", path, err)
+			l.Warnln("Archiver: can't remove directory", path, err)
 		}
 	}
 
@@ -149,13 +149,13 @@ func (v Staggered) clean() {
 }
 
 func (v Staggered) expire(versions []string) {
-	l.Debugln("Versioner: Expiring versions", versions)
+	l.Debugln("Archiver: Expiring versions", versions)
 	var prevAge int64
 	firstFile := true
 	for _, file := range versions {
 		fi, err := osutil.Lstat(file)
 		if err != nil {
-			l.Warnln("versioner:", err)
+			l.Warnln("Archiver:", err)
 			continue
 		}
 
@@ -167,17 +167,17 @@ func (v Staggered) expire(versions []string) {
 		loc, _ := time.LoadLocation("Local")
 		versionTime, err := time.ParseInLocation(TimeFormat, filenameTag(file), loc)
 		if err != nil {
-			l.Debugf("Versioner: file name %q is invalid: %v", file, err)
+			l.Debugf("Archiver: file name %q is invalid: %v", file, err)
 			continue
 		}
 		age := int64(time.Since(versionTime).Seconds())
 
 		// If the file is older than the max age of the last interval, remove it
 		if lastIntv := v.interval[len(v.interval)-1]; lastIntv.end > 0 && age > lastIntv.end {
-			l.Debugln("Versioner: File over maximum age -> delete ", file)
+			l.Debugln("Archiver: File over maximum age -> delete ", file)
 			err = os.Remove(file)
 			if err != nil {
-				l.Warnf("Versioner: can't remove %q: %v", file, err)
+				l.Warnf("Archiver: can't remove %q: %v", file, err)
 			}
 			continue
 		}
@@ -201,7 +201,7 @@ func (v Staggered) expire(versions []string) {
 			l.Debugln("too many files in step -> delete", file)
 			err = os.Remove(file)
 			if err != nil {
-				l.Warnf("Versioner: can't remove %q: %v", file, err)
+				l.Warnf("Archiver: can't remove %q: %v", file, err)
 			}
 			continue
 		}

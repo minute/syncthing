@@ -25,7 +25,7 @@ type FolderConfiguration struct {
 	IgnorePerms           bool                        `xml:"ignorePerms,attr" json:"ignorePerms"`
 	AutoNormalize         bool                        `xml:"autoNormalize,attr" json:"autoNormalize"`
 	MinDiskFreePct        float64                     `xml:"minDiskFreePct" json:"minDiskFreePct"`
-	Versioning            VersioningConfiguration     `xml:"versioning" json:"versioning"`
+	Archiving             ArchivingConfiguration      `xml:"archiving" json:"archiving"`
 	Copiers               int                         `xml:"copiers" json:"copiers"` // This defines how many files are handled concurrently.
 	Pullers               int                         `xml:"pullers" json:"pullers"` // Defines how many blocks are fetched at the same time, possibly between separate copier routines.
 	Hashers               int                         `xml:"hashers" json:"hashers"` // Less than one sets the value to the number of cores. These are CPU bound due to hashing.
@@ -37,7 +37,9 @@ type FolderConfiguration struct {
 	MaxConflicts          int                         `xml:"maxConflicts" json:"maxConflicts"`
 	DisableSparseFiles    bool                        `xml:"disableSparseFiles" json:"disableSparseFiles"`
 
-	Invalid    string `xml:"-" json:"invalid"` // Set at runtime when there is an error, not saved
+	Invalid              string                 `xml:"-" json:"invalid"`              // Set at runtime when there is an error, not saved
+	DeprecatedVersioning ArchivingConfiguration `xml:"versioning,omitempty" json:"-"` // For converting from v12 and older config
+
 	cachedPath string
 }
 
@@ -58,7 +60,7 @@ func (f FolderConfiguration) Copy() FolderConfiguration {
 	c := f
 	c.Devices = make([]FolderDeviceConfiguration, len(f.Devices))
 	copy(c.Devices, f.Devices)
-	c.Versioning = f.Versioning.Copy()
+	c.Archiving = f.Archiving.Copy()
 	return c
 }
 

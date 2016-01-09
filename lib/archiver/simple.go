@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"os"
@@ -24,7 +24,7 @@ type Simple struct {
 	folderPath string
 }
 
-func NewSimple(folderID, folderPath string, params map[string]string) Versioner {
+func NewSimple(folderID, folderPath string, params map[string]string) Archiver {
 	keep, err := strconv.Atoi(params["keep"])
 	if err != nil {
 		keep = 5 // A reasonable default

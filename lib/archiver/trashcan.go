@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"fmt"
@@ -27,7 +27,7 @@ type Trashcan struct {
 	stop         chan struct{}
 }
 
-func NewTrashcan(folderID, folderPath string, params map[string]string) Versioner {
+func NewTrashcan(folderID, folderPath string, params map[string]string) Archiver {
 	cleanoutDays, _ := strconv.Atoi(params["cleanoutDays"])
 	// On error we default to 0, "do not clean out the trash can"
 

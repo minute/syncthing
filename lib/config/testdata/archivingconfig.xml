@@ -1,0 +1,8 @@
+<configuration version="13">
+    <folder id="test" directory="testdata/" ro="true">
+        <archiving type="simple">
+            <param key="foo" val="bar"/>
+            <param key="baz" val="quux"/>
+        </archiving>
+    </folder>
+</configuration>

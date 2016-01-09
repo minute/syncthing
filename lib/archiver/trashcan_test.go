@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"io/ioutil"
@@ -49,8 +49,8 @@ func TestTrashcanCleanout(t *testing.T) {
 		}
 	}
 
-	versioner := NewTrashcan("default", "testdata", map[string]string{"cleanoutDays": "7"}).(*Trashcan)
-	if err := versioner.cleanoutArchive(); err != nil {
+	archiver := NewTrashcan("default", "testdata", map[string]string{"cleanoutDays": "7"}).(*Trashcan)
+	if err := archiver.cleanoutArchive(); err != nil {
 		t.Fatal(err)
 	}
 

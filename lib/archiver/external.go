@@ -4,7 +4,7 @@
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
 // You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package versioner
+package archiver
 
 import (
 	"errors"
@@ -26,7 +26,7 @@ type External struct {
 	folderPath string
 }
 
-func NewExternal(folderID, folderPath string, params map[string]string) Versioner {
+func NewExternal(folderID, folderPath string, params map[string]string) Archiver {
 	command := params["command"]
 
 	s := External{
@@ -57,7 +57,7 @@ func (v External) Archive(filePath string) error {
 	}
 
 	if v.command == "" {
-		return errors.New("Versioner: command is empty, please enter a valid command")
+		return errors.New("Archiver: command is empty, please enter a valid command")
 	}
 
 	cmd := exec.Command(v.command, v.folderPath, inFolderPath)
@@ -79,5 +79,5 @@ func (v External) Archive(filePath string) error {
 	if _, err = osutil.Lstat(filePath); os.IsNotExist(err) {
 		return nil
 	}
-	return errors.New("Versioner: file was not removed by external script")
+	return errors.New("Archiver: file was not removed by external script")
 }

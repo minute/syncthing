@@ -24,7 +24,7 @@ import (
 
 const (
 	OldestHandledVersion = 10
-	CurrentVersion       = 12
+	CurrentVersion       = 13
 	MaxRescanIntervalS   = 365 * 24 * 60 * 60
 )
 
@@ -182,6 +182,9 @@ func (cfg *Configuration) prepare(myID protocol.DeviceID) {
 	if cfg.Version == 11 {
 		convertV11V12(cfg)
 	}
+	if cfg.Version == 12 {
+		convertV12V13(cfg)
+	}
 
 	// Build a list of available devices
 	existingDevices := make(map[protocol.DeviceID]bool)
@@ -229,6 +232,14 @@ func (cfg *Configuration) prepare(myID protocol.DeviceID) {
 	if cfg.GUI.RawAPIKey == "" {
 		cfg.GUI.RawAPIKey = randomString(32)
 	}
+}
+
+func convertV12V13(cfg *Configuration) {
+	for i := range cfg.Folders {
+		cfg.Folders[i].Archiving = cfg.Folders[i].DeprecatedVersioning
+		cfg.Folders[i].DeprecatedVersioning = ArchivingConfiguration{}
+	}
+	cfg.Version = 13
 }
 
 func convertV11V12(cfg *Configuration) {

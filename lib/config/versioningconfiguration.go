@@ -8,12 +8,12 @@ package config
 
 import "encoding/xml"
 
-type VersioningConfiguration struct {
+type ArchivingConfiguration struct {
 	Type   string            `xml:"type,attr" json:"type"`
 	Params map[string]string `json:"params"`
 }
 
-type InternalVersioningConfiguration struct {
+type InternalArchivingConfiguration struct {
 	Type   string          `xml:"type,attr,omitempty"`
 	Params []InternalParam `xml:"param"`
 }
@@ -23,7 +23,7 @@ type InternalParam struct {
 	Val string `xml:"val,attr"`
 }
 
-func (c VersioningConfiguration) Copy() VersioningConfiguration {
+func (c ArchivingConfiguration) Copy() ArchivingConfiguration {
 	cp := c
 	cp.Params = make(map[string]string, len(c.Params))
 	for k, v := range c.Params {
@@ -32,8 +32,8 @@ func (c VersioningConfiguration) Copy() VersioningConfiguration {
 	return cp
 }
 
-func (c *VersioningConfiguration) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
-	var tmp InternalVersioningConfiguration
+func (c *ArchivingConfiguration) MarshalXML(e *xml.Encoder, start xml.StartElement) error {
+	var tmp InternalArchivingConfiguration
 	tmp.Type = c.Type
 	for k, v := range c.Params {
 		tmp.Params = append(tmp.Params, InternalParam{k, v})
@@ -43,8 +43,8 @@ func (c *VersioningConfiguration) MarshalXML(e *xml.Encoder, start xml.StartElem
 
 }
 
-func (c *VersioningConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
-	var tmp InternalVersioningConfiguration
+func (c *ArchivingConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	var tmp InternalArchivingConfiguration
 	err := d.DecodeElement(&tmp, &start)
 	if err != nil {
 		return err

@@ -17,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/syncthing/syncthing/lib/archiver"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/events"
@@ -26,7 +27,6 @@ import (
 	"github.com/syncthing/syncthing/lib/scanner"
 	"github.com/syncthing/syncthing/lib/symlinks"
 	"github.com/syncthing/syncthing/lib/sync"
-	"github.com/syncthing/syncthing/lib/versioner"
 )
 
 // TODO: Stop on errors
@@ -83,7 +83,7 @@ type rwFolder struct {
 	folder         string
 	dir            string
 	scanIntv       time.Duration
-	versioner      versioner.Versioner
+	archiver       archiver.Archiver
 	ignorePerms    bool
 	copiers        int
 	pullers        int
@@ -766,8 +766,8 @@ func (p *rwFolder) deleteFile(file protocol.FileInfo) {
 		// we have resolved the conflict.
 		file.Version = file.Version.Merge(cur.Version)
 		err = osutil.InWritableDir(p.moveForConflict, realName)
-	} else if p.versioner != nil {
-		err = osutil.InWritableDir(p.versioner.Archive, realName)
+	} else if p.archiver != nil {
+		err = osutil.InWritableDir(p.archiver.Archive, realName)
 	} else {
 		err = osutil.InWritableDir(osutil.Remove, realName)
 	}
@@ -825,10 +825,10 @@ func (p *rwFolder) renameFile(source, target protocol.FileInfo) {
 	from := filepath.Join(p.dir, source.Name)
 	to := filepath.Join(p.dir, target.Name)
 
-	if p.versioner != nil {
+	if p.archiver != nil {
 		err = osutil.Copy(from, to)
 		if err == nil {
-			err = osutil.InWritableDir(p.versioner.Archive, from)
+			err = osutil.InWritableDir(p.archiver.Archive, from)
 		}
 	} else {
 		err = osutil.TryRename(from, to)
@@ -1314,12 +1314,12 @@ func (p *rwFolder) performFinish(state *sharedPullerState) error {
 				return err
 			}
 
-		case p.versioner != nil:
+		case p.archiver != nil:
 			// If we should use versioning, let the versioner archive the old
 			// file before we replace it. Archiving a non-existent file is not
 			// an error.
 
-			if err = p.versioner.Archive(state.realName); err != nil {
+			if err = p.archiver.Archive(state.realName); err != nil {
 				return err
 			}
 		}
