@@ -83,16 +83,16 @@
                 </select>
               </div>
               <div class="form-group">
-                <label translate>File Versioning</label>&emsp;<a href="http://docs.syncthing.net/users/versioning.html" target="_blank"><span class="fa fa-book"></span>&nbsp;<span translate>Help</span></a>
-                <select class="form-control" ng-model="currentFolder.fileVersioningSelector">
-                  <option value="none" translate>No File Versioning</option>
-                  <option value="trashcan" translate>Trash Can File Versioning</option>
-                  <option value="simple" translate>Simple File Versioning</option>
-                  <option value="staggered" translate>Staggered File Versioning</option>
-                  <option value="external" translate>External File Versioning</option>
+                <label translate>File Archiving</label>&emsp;<a href="http://docs.syncthing.net/users/versioning.html" target="_blank"><span class="fa fa-book"></span>&nbsp;<span translate>Help</span></a>
+                <select class="form-control" ng-model="currentFolder.fileArchivingSelector">
+                  <option value="none" translate>No File Archiving</option>
+                  <option value="trashcan" translate>Trash Can File Archiving</option>
+                  <option value="simple" translate>Simple File Archiving</option>
+                  <option value="staggered" translate>Staggered File Archiving</option>
+                  <option value="external" translate>External File Archiving</option>
                 </select>
               </div>
-              <div class="form-group" ng-if="currentFolder.fileVersioningSelector=='trashcan'" ng-class="{'has-error': folderEditor.trashcanClean.$invalid && folderEditor.trashcanClean.$dirty}">
+              <div class="form-group" ng-if="currentFolder.fileArchivingSelector=='trashcan'" ng-class="{'has-error': folderEditor.trashcanClean.$invalid && folderEditor.trashcanClean.$dirty}">
                 <p translate class="help-block">Files are moved to .stversions folder when replaced or deleted by Syncthing.</p>
                 <label translate for="trashcanClean">Clean out after</label>
                 <div class="input-group">
@@ -105,7 +105,7 @@
                   <span translate ng-if="folderEditor.trashcanClean.$error.min && folderEditor.trashcanClean.$dirty">A negative number of days doesn't make sense.</span>
                 </p>
               </div>
-              <div class="form-group" ng-if="currentFolder.fileVersioningSelector=='simple'" ng-class="{'has-error': folderEditor.simpleKeep.$invalid && folderEditor.simpleKeep.$dirty}">
+              <div class="form-group" ng-if="currentFolder.fileArchivingSelector=='simple'" ng-class="{'has-error': folderEditor.simpleKeep.$invalid && folderEditor.simpleKeep.$dirty}">
                 <p translate class="help-block">Files are moved to date stamped versions in a .stversions folder when replaced or deleted by Syncthing.</p>
                 <label translate for="simpleKeep">Keep Versions</label>
                 <input name="simpleKeep" id="simpleKeep" class="form-control" type="number" ng-model="currentFolder.simpleKeep" required min="1"></input>
@@ -115,7 +115,7 @@
                   <span translate ng-if="folderEditor.simpleKeep.$error.min && folderEditor.simpleKeep.$dirty">You must keep at least one version.</span>
                 </p>
               </div>
-              <div class="form-group" ng-if="currentFolder.fileVersioningSelector=='staggered'" ng-class="{'has-error': folderEditor.staggeredMaxAge.$invalid && folderEditor.staggeredMaxAge.$dirty}">
+              <div class="form-group" ng-if="currentFolder.fileArchivingSelector=='staggered'" ng-class="{'has-error': folderEditor.staggeredMaxAge.$invalid && folderEditor.staggeredMaxAge.$dirty}">
                 <p class="help-block"><span translate>Files are moved to date stamped versions in a .stversions folder when replaced or deleted by Syncthing.</span> <span translate>Versions are automatically deleted if they are older than the maximum age or exceed the number of files allowed in an interval.</span></p>
                 <p translate class="help-block">The following intervals are used: for the first hour a version is kept every 30 seconds, for the first day a version is kept every hour, for the first 30 days a version is kept every day, until the maximum age a version is kept every week.</p>
                 <label translate for="staggeredMaxAge">Maximum Age</label>
@@ -126,12 +126,12 @@
                   <span translate ng-if="folderEditor.staggeredMaxAge.$error.min && folderEditor.staggeredMaxAge.$dirty">A negative number of days doesn't make sense.</span>
                 </p>
               </div>
-              <div class="form-group" ng-if="currentFolder.fileVersioningSelector == 'staggered'">
+              <div class="form-group" ng-if="currentFolder.fileArchivingSelector == 'staggered'">
                 <label translate for="staggeredVersionsPath">Versions Path</label>
                 <input name="staggeredVersionsPath" id="staggeredVersionsPath" class="form-control" type="text" ng-model="currentFolder.staggeredVersionsPath"></input>
                 <p translate class="help-block">Path where versions should be stored (leave empty for the default .stversions folder in the folder).</p>
               </div>
-              <div class="form-group" ng-if="currentFolder.fileVersioningSelector=='external'" ng-class="{'has-error': folderEditor.externalCommand.$invalid && folderEditor.externalCommand.$dirty}">
+              <div class="form-group" ng-if="currentFolder.fileArchivingSelector=='external'" ng-class="{'has-error': folderEditor.externalCommand.$invalid && folderEditor.externalCommand.$dirty}">
                 <p translate class="help-block">An external command handles the versioning. It has to remove the file from the synced folder.</p>
                 <label translate for="externalCommand">Command</label>
                 <input name="externalCommand" id="externalCommand" class="form-control" type="text" ng-model="currentFolder.externalCommand" required></input>
