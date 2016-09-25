@@ -12,6 +12,8 @@ import (
 	"github.com/syncthing/syncthing/lib/db"
 )
 
+const deviceAddressExpiry = 7 * 24 * time.Hour
+
 type DeviceStatistics struct {
 	LastSeen time.Time `json:"lastSeen"`
 }
@@ -49,4 +51,40 @@ func (s *DeviceStatisticsReference) GetStatistics() DeviceStatistics {
 	return DeviceStatistics{
 		LastSeen: s.GetLastSeen(),
 	}
+}
+
+// AddAddress
+func (s *DeviceStatisticsReference) AddAddress(addr string) {
+	var devAddrs DeviceAddrs
+	devAddrs.Addresses = s.GetAddresses()
+
+	for i, exists := range devAddrs.Addresses {
+		if exists.address == addr {
+			devAddrs.Addresses[i].validUntil = time.Now().Add(deviceAddressExpiry).Unix()
+			goto save
+		}
+	}
+
+	devAddrs.Addresses = append(devAddrs.Addresses, DeviceAddr{
+		address:    addr,
+		validUntil: time.Now().Add(deviceAddressExpiry).Unix(),
+	})
+
+save:
+	bs, _ := devAddrs.Marshal() // can't fail
+	s.ns.PutBytes("addrs", bs)
+}
+
+// GetAddresses returns the list of addresses seen for this device in the
+// last deviceAddressExpiry interval.
+func (s *DeviceStatisticsReference) GetAddresses() []DeviceAddr {
+	bs, ok := s.ns.Bytes("addrs")
+	if !ok {
+		return nil
+	}
+	var devAddrs DeviceAddrs
+	if err := devAddrs.Unmarshal(bs); err != nil {
+		return nil
+	}
+	return devAddrs.Addresses
 }

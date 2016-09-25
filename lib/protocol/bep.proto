@@ -36,6 +36,7 @@ enum MessageType {
     DOWNLOAD_PROGRESS = 5 [(gogoproto.enumvalue_customname) = "messageTypeDownloadProgress"];
     PING              = 6 [(gogoproto.enumvalue_customname) = "messageTypePing"];
     CLOSE             = 7 [(gogoproto.enumvalue_customname) = "messageTypeClose"];
+    DISCOVERY_GOSSIP  = 8 [(gogoproto.enumvalue_customname) = "messageTypeDiscoveryGossip"];
 }
 
 enum MessageCompression {
@@ -189,3 +190,14 @@ message Close {
     string reason = 1;
 }
 
+// Discovery Gossip
+
+message DiscoveryGossip {
+    bytes                    id        = 1 [(gogoproto.customname) = "ID"];
+    repeated DGDeviceAddress addresses = 2 [(gogoproto.nullable) = false];
+}
+
+message DGDeviceAddress {
+    string address    = 1;
+    int64  validUntil = 2; // epoch seconds
+}

@@ -1,0 +1,22 @@
+// protoc --proto_path=../../../../../:../../../../gogo/protobuf/protobuf:. --gogofast_out=. message.proto
+
+syntax = "proto3";
+
+package stats;
+
+import "github.com/gogo/protobuf/gogoproto/gogo.proto";
+
+option (gogoproto.goproto_getters_all) = false;
+option (gogoproto.sizer_all) = false;
+option (gogoproto.protosizer_all) = true;
+option (gogoproto.goproto_enum_stringer_all) = true;
+option (gogoproto.goproto_enum_prefix_all) = false;
+
+message DeviceAddrs {
+    repeated DeviceAddr addresses = 1 [(gogoproto.nullable) = false];
+}
+
+message DeviceAddr {
+    string address     = 1 [(gogoproto.customname) = "address"];
+    int64  validUntilS = 2 [(gogoproto.customname) = "validUntil"]; // epoch seconds
+}

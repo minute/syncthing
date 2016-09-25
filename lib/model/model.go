@@ -1341,6 +1341,40 @@ func (m *Model) deviceWasSeen(deviceID protocol.DeviceID) {
 	m.deviceStatRef(deviceID).WasSeen()
 }
 
+func (m *Model) DidConnectTo(deviceID protocol.DeviceID, address string) {
+	m.deviceStatRef(deviceID).AddAddress(address)
+	m.gossip(deviceID)
+}
+
+func (m *Model) gossip(deviceID protocol.DeviceID) {
+	addrs := m.deviceStatRef(deviceID).GetAddresses()
+	msg := new(protocol.DiscoveryGossip)
+	msg.ID = deviceID[:]
+	for _, addr := range addrs {
+		msg.Addresses = append(msg.Addresses, protocol.DGDeviceAddress{
+			Address:    addr.Address(),
+			ValidUntil: addr.ValidUntil().Unix(),
+		})
+	}
+
+	m.fmut.RLock()
+	m.pmut.RLock()
+	sentTo := make(map[protocol.DeviceID]bool)
+	for _, folder := range m.deviceFolders[deviceID] {
+		for _, device := range m.folderDevices[folder] {
+			if sentTo[device] {
+				continue
+			}
+
+			m.conn[device].DiscoveryGossip(msg)
+
+			sentTo[device] = true
+		}
+	}
+	m.pmut.RUnlock()
+	m.fmut.RUnlock()
+}
+
 func (m *Model) folderStatRef(folder string) *stats.FolderStatisticsReference {
 	m.fmut.Lock()
 	defer m.fmut.Unlock()

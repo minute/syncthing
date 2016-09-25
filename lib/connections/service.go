@@ -374,6 +374,8 @@ func (s *Service) connect() {
 					continue
 				}
 
+				s.model.DidConnectTo(deviceID, addr)
+
 				s.conns <- conn
 				continue nextDevice
 			}
