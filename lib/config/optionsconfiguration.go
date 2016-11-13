@@ -6,6 +6,13 @@
 
 package config
 
+import (
+	"encoding/json"
+	"encoding/xml"
+
+	"github.com/syncthing/syncthing/lib/util"
+)
+
 type OptionsConfiguration struct {
 	ListenAddresses         []string `xml:"listenAddress" json:"listenAddresses" default:"default"`
 	GlobalAnnServers        []string `xml:"globalAnnounceServer" json:"globalAnnounceServers" json:"globalAnnounceServer" default:"default"`
@@ -49,15 +56,27 @@ type OptionsConfiguration struct {
 	DeprecatedRelayServers []string `xml:"relayServer,omitempty" json:"-"`
 }
 
-func (orig OptionsConfiguration) Copy() OptionsConfiguration {
-	c := orig
-	c.ListenAddresses = make([]string, len(orig.ListenAddresses))
-	copy(c.ListenAddresses, orig.ListenAddresses)
-	c.GlobalAnnServers = make([]string, len(orig.GlobalAnnServers))
-	copy(c.GlobalAnnServers, orig.GlobalAnnServers)
-	c.AlwaysLocalNets = make([]string, len(orig.AlwaysLocalNets))
-	copy(c.AlwaysLocalNets, orig.AlwaysLocalNets)
-	c.UnackedNotificationIDs = make([]string, len(orig.UnackedNotificationIDs))
-	copy(c.UnackedNotificationIDs, orig.UnackedNotificationIDs)
-	return c
+func (c OptionsConfiguration) Copy() OptionsConfiguration {
+	cpy := c
+	cpy.ListenAddresses = make([]string, len(c.ListenAddresses))
+	copy(cpy.ListenAddresses, c.ListenAddresses)
+	cpy.GlobalAnnServers = make([]string, len(c.GlobalAnnServers))
+	copy(cpy.GlobalAnnServers, c.GlobalAnnServers)
+	cpy.AlwaysLocalNets = make([]string, len(c.AlwaysLocalNets))
+	copy(cpy.AlwaysLocalNets, c.AlwaysLocalNets)
+	cpy.UnackedNotificationIDs = make([]string, len(c.UnackedNotificationIDs))
+	copy(cpy.UnackedNotificationIDs, c.UnackedNotificationIDs)
+	return cpy
+}
+
+func (c *OptionsConfiguration) UnmarshalJSON(data []byte) error {
+	type methodless OptionsConfiguration
+	util.SetDefaults(c)
+	return json.Unmarshal(data, (*methodless)(c))
+}
+
+func (c *OptionsConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type methodless OptionsConfiguration
+	util.SetDefaults(c)
+	return d.DecodeElement((*methodless)(c), &start)
 }

@@ -81,10 +81,6 @@ func New(myID protocol.DeviceID) Configuration {
 func ReadXML(r io.Reader, myID protocol.DeviceID) (Configuration, error) {
 	var cfg Configuration
 
-	util.SetDefaults(&cfg)
-	util.SetDefaults(&cfg.Options)
-	util.SetDefaults(&cfg.GUI)
-
 	if err := xml.NewDecoder(r).Decode(&cfg); err != nil {
 		return Configuration{}, err
 	}
@@ -98,10 +94,6 @@ func ReadXML(r io.Reader, myID protocol.DeviceID) (Configuration, error) {
 
 func ReadJSON(r io.Reader, myID protocol.DeviceID) (Configuration, error) {
 	var cfg Configuration
-
-	util.SetDefaults(&cfg)
-	util.SetDefaults(&cfg.Options)
-	util.SetDefaults(&cfg.GUI)
 
 	bs, err := ioutil.ReadAll(r)
 	if err != nil {
@@ -153,6 +145,18 @@ func (cfg Configuration) Copy() Configuration {
 	copy(newCfg.IgnoredDevices, cfg.IgnoredDevices)
 
 	return newCfg
+}
+
+func (cfg *Configuration) UnmarshalJSON(data []byte) error {
+	type methodless Configuration
+	util.SetDefaults(cfg)
+	return json.Unmarshal(data, (*methodless)(cfg))
+}
+
+func (cfg *Configuration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type methodless Configuration
+	util.SetDefaults(cfg)
+	return d.DecodeElement((*methodless)(cfg), &start)
 }
 
 func (cfg *Configuration) WriteXML(w io.Writer) error {

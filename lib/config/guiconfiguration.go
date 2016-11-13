@@ -7,9 +7,13 @@
 package config
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"net/url"
 	"os"
 	"strings"
+
+	"github.com/syncthing/syncthing/lib/util"
 )
 
 type GUIConfiguration struct {
@@ -91,4 +95,16 @@ func (c GUIConfiguration) IsValidAPIKey(apiKey string) bool {
 	default:
 		return false
 	}
+}
+
+func (c *GUIConfiguration) UnmarshalJSON(data []byte) error {
+	type methodless GUIConfiguration
+	util.SetDefaults(c)
+	return json.Unmarshal(data, (*methodless)(c))
+}
+
+func (c *GUIConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type methodless GUIConfiguration
+	util.SetDefaults(c)
+	return d.DecodeElement((*methodless)(c), &start)
 }

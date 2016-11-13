@@ -7,6 +7,8 @@
 package config
 
 import (
+	"encoding/json"
+	"encoding/xml"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/util"
 )
 
 type FolderConfiguration struct {
@@ -172,6 +175,18 @@ func (f *FolderConfiguration) cleanedPath() string {
 	}
 
 	return cleaned
+}
+
+func (f *FolderConfiguration) UnmarshalJSON(data []byte) error {
+	type methodless FolderConfiguration
+	util.SetDefaults(f)
+	return json.Unmarshal(data, (*methodless)(f))
+}
+
+func (f *FolderConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type methodless FolderConfiguration
+	util.SetDefaults(f)
+	return d.DecodeElement((*methodless)(f), &start)
 }
 
 type FolderDeviceConfigurationList []FolderDeviceConfiguration

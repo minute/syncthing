@@ -6,7 +6,13 @@
 
 package config
 
-import "github.com/syncthing/syncthing/lib/protocol"
+import (
+	"encoding/json"
+	"encoding/xml"
+
+	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/util"
+)
 
 type DeviceConfiguration struct {
 	DeviceID                 protocol.DeviceID    `xml:"id,attr" json:"deviceID"`
@@ -26,11 +32,23 @@ func NewDeviceConfiguration(id protocol.DeviceID, name string) DeviceConfigurati
 	}
 }
 
-func (orig DeviceConfiguration) Copy() DeviceConfiguration {
-	c := orig
-	c.Addresses = make([]string, len(orig.Addresses))
-	copy(c.Addresses, orig.Addresses)
-	return c
+func (c DeviceConfiguration) Copy() DeviceConfiguration {
+	cpy := c
+	cpy.Addresses = make([]string, len(c.Addresses))
+	copy(cpy.Addresses, c.Addresses)
+	return cpy
+}
+
+func (c *DeviceConfiguration) UnmarshalJSON(data []byte) error {
+	type methodless DeviceConfiguration
+	util.SetDefaults(c)
+	return json.Unmarshal(data, (*methodless)(c))
+}
+
+func (c *DeviceConfiguration) UnmarshalXML(d *xml.Decoder, start xml.StartElement) error {
+	type methodless DeviceConfiguration
+	util.SetDefaults(c)
+	return d.DecodeElement((*methodless)(c), &start)
 }
 
 type DeviceConfigurationList []DeviceConfiguration
