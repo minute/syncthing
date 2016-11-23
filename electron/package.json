@@ -1,27 +1,24 @@
 {
-  "name": "electron-quick-start",
+  "name": "Syncthing",
   "version": "1.0.0",
-  "description": "A minimal Electron application",
+  "description": "Syncthing",
   "main": "main.js",
   "scripts": {
     "start": "electron main.js"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/electron/electron-quick-start.git"
+    "url": "git+https://github.com/syncthing/syncthing.git"
   },
   "keywords": [
-    "Electron",
-    "quick",
-    "start",
-    "tutorial"
+    "Syncthing"
   ],
-  "author": "GitHub",
-  "license": "CC0-1.0",
+  "author": "The Syncthing Authors",
+  "license": "MPL-2.0",
   "bugs": {
-    "url": "https://github.com/electron/electron-quick-start/issues"
+    "url": "https://github.com/syncthing/syncthing/issues"
   },
-  "homepage": "https://github.com/electron/electron-quick-start#readme",
+  "homepage": "https://syncthing.net/",
   "devDependencies": {
     "electron-prebuilt": "^1.2.0"
   },
