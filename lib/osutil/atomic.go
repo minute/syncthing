@@ -8,10 +8,12 @@ package osutil
 
 import (
 	"errors"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
+	"sync"
+	"time"
 )
 
 var (
@@ -32,18 +34,9 @@ type AtomicWriter struct {
 // CreateAtomic is like os.Create with a FileMode, except a temporary file
 // name is used instead of the given name.
 func CreateAtomic(path string, mode os.FileMode) (*AtomicWriter, error) {
-	fd, err := ioutil.TempFile(filepath.Dir(path), TempPrefix)
+	fd, err := tempFile(filepath.Dir(path), TempPrefix, mode)
 	if err != nil {
 		return nil, err
-	}
-
-	// chmod fails on Android so don't even try
-	if runtime.GOOS != "android" {
-		if err := os.Chmod(fd.Name(), mode); err != nil {
-			fd.Close()
-			os.Remove(fd.Name())
-			return nil, err
-		}
 	}
 
 	w := &AtomicWriter{
@@ -108,4 +101,52 @@ func (w *AtomicWriter) Close() error {
 	w.err = ErrClosed
 
 	return nil
+}
+
+// The rest of this file is from ioutil in Go 1.7.3 with light modifications.
+
+// tempFile is ioutil.TempFile but with the mode configurable
+func tempFile(dir, prefix string, mode os.FileMode) (f *os.File, err error) {
+	if dir == "" {
+		dir = os.TempDir()
+	}
+
+	nconflict := 0
+	for i := 0; i < 10000; i++ {
+		name := filepath.Join(dir, prefix+nextSuffix())
+		f, err = os.OpenFile(name, os.O_RDWR|os.O_CREATE|os.O_EXCL, mode)
+		if os.IsExist(err) {
+			if nconflict++; nconflict > 10 {
+				randmu.Lock()
+				rand = reseed()
+				randmu.Unlock()
+			}
+			continue
+		}
+		break
+	}
+	return
+}
+
+// Random number state.
+// We generate random temporary file names so that there's a good
+// chance the file doesn't exist yet - keeps the number of tries in
+// TempFile to a minimum.
+var rand uint32
+var randmu sync.Mutex
+
+func reseed() uint32 {
+	return uint32(time.Now().UnixNano() + int64(os.Getpid()))
+}
+
+func nextSuffix() string {
+	randmu.Lock()
+	r := rand
+	if r == 0 {
+		r = reseed()
+	}
+	r = r*1664525 + 1013904223 // constants from Numerical Recipes
+	rand = r
+	randmu.Unlock()
+	return strconv.Itoa(int(1e9 + r%1e9))[1:]
 }
