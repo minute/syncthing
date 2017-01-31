@@ -135,16 +135,6 @@ table.table-condensed td.no-overflow-ellipse {
     width: 450px;
 }
 
-*[language-select] > .dropdown-menu > li {
-    float: left;
-    width: 50%;
-}
-
-*[language-select] > .dropdown-menu > li > a {
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .nav>li{
     float: left;
 }

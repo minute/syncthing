@@ -18,6 +18,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"golang.org/x/text/language"
+	"golang.org/x/text/language/display"
 )
 
 type stat struct {
@@ -163,12 +166,6 @@ type languageResponse struct {
 }
 
 func languageName(code string) string {
-	var lang languageResponse
-	resp := req("https://www.transifex.com/api/2/language/" + code)
-	defer resp.Body.Close()
-	json.NewDecoder(resp.Body).Decode(&lang)
-	if lang.Name == "" {
-		return code
-	}
-	return lang.Name
+	tag := language.Make(code)
+	return fmt.Sprintf("%s (%s)", display.Self.Name(tag), display.English.Languages().Name(tag))
 }

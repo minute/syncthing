@@ -3,13 +3,11 @@ angular.module('syncthing.core')
         'use strict';
         return {
             restrict: 'EA',
-            template:
-                    '<a ng-if="visible" href="#" class="dropdown-toggle" data-toggle="dropdown" aria-expanded="false"><span class="fa fa-globe"></span><span class="hidden-xs">&nbsp;{{localesNames[currentLocale] || "English"}}</span> <span class="caret"></span></a>'+
-                    '<ul ng-if="visible" class="dropdown-menu">'+
-                        '<li ng-repeat="(i,name) in localesNames" ng-class="{active: i==currentLocale}">'+
-                            '<a href="#" data-ng-click="changeLanguage(i)">{{name}}</a>'+
-                        '</li>'+
-                    '</ul>',
+            template: '<form class="navbar-form"><div class="form-group"><select class="form-control">'+
+                        '<option ng-repeat="(i,name) in localesNames" data-ng-click="changeLanguage(i)">'+
+                            '{{name}}'+
+                        '</option>'+
+                    '</select></div></form>',
 
             link: function ($scope) {
                 var availableLocales = LocaleService.getAvailableLocales();
