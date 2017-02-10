@@ -502,6 +502,7 @@ func (m *Model) Completion(device protocol.DeviceID, folder string) FolderComple
 	counts := m.deviceDownloads[device].GetBlockCounts(folder)
 	m.pmut.RUnlock()
 
+	ignores := m.folderIgnores[folder]
 	var need, fileNeed, downloaded, deletes int64
 	rf.WithNeedTruncated(device, func(f db.FileIntf) bool {
 		if ignores.Match(f.FileName()).IsIgnored() {
@@ -679,6 +680,29 @@ func (m *Model) NeedFolderFiles(folder string, page, perpage int) ([]db.FileInfo
 	})
 
 	return progress, queued, rest, total
+}
+
+func (m *Model) RemoteNeedFolderFiles(device protocol.DeviceID, folder string) []db.FileInfoTruncated {
+	m.fmut.RLock()
+	defer m.fmut.RUnlock()
+
+	rf, ok := m.folderFiles[folder]
+	if !ok {
+		return nil
+	}
+
+	ignores := m.folderIgnores[folder]
+	var res []db.FileInfoTruncated
+	rf.WithNeedTruncated(device, func(f db.FileIntf) bool {
+		if ignores.Match(f.FileName()).IsIgnored() {
+			return true
+		}
+		ft := f.(db.FileInfoTruncated)
+		res = append(res, ft)
+		return true
+	})
+
+	return res
 }
 
 // Index is called when a new device is connected and we receive their full index.

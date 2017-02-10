@@ -79,6 +79,7 @@ type modelIntf interface {
 	Completion(device protocol.DeviceID, folder string) model.FolderCompletion
 	Override(folder string)
 	NeedFolderFiles(folder string, page, perpage int) ([]db.FileInfoTruncated, []db.FileInfoTruncated, []db.FileInfoTruncated, int)
+	RemoteNeedFolderFiles(device protocol.DeviceID, folder string) []db.FileInfoTruncated
 	NeedSize(folder string) db.Counts
 	ConnectionStats() map[string]interface{}
 	DeviceStatistics() map[string]stats.DeviceStatistics
@@ -702,6 +703,17 @@ func (s *apiService) getDBNeed(w http.ResponseWriter, r *http.Request) {
 	perpage, err := strconv.Atoi(qs.Get("perpage"))
 	if err != nil || perpage < 1 {
 		perpage = 1 << 16
+	}
+
+	if device := qs.Get("device"); device != "" {
+		id, err := protocol.DeviceIDFromString(device)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		res := s.model.RemoteNeedFolderFiles(id, folder)
+		sendJSON(w, res)
+		return
 	}
 
 	progress, queued, rest, total := s.model.NeedFolderFiles(folder, page, perpage)
