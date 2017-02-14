@@ -2436,6 +2436,97 @@ func TestRootedJoinedPath(t *testing.T) {
 	}
 }
 
+func TestEqualContentsInSync(t *testing.T) {
+	// Files that are identical and differ only in the version vector should
+	// be considered equivalent and not trigger "out of sync" on send only
+	// devices.
+
+	// Create a folder config that is send only, and includes both device1
+	// and device2 (device1 is there by default).
+
+	folderCfg := defaultFolderConfig
+	folderCfg.Devices = append(folderCfg.Devices, config.FolderDeviceConfiguration{DeviceID: device2})
+	folderCfg.Type = config.FolderTypeSendOnly
+
+	// Let m be device1, send only, and scan the test data.
+
+	fdb := db.OpenMemory()
+	m := NewModel(defaultConfig, device1, "device", "syncthing", "dev", fdb, nil)
+
+	m.AddFolder(folderCfg)
+	m.StartFolder("default")
+	m.ServeBackground()
+	defer m.Stop()
+	m.ScanFolder("default")
+
+	// There should be stuff in the folder, or the test is meaningless
+
+	size := m.GlobalSize("default")
+	if size.Bytes == 0 || size.Files == 0 || size.Directories == 0 {
+		t.Fatal("should have data in the folder after initial scan")
+	}
+
+	// Device1 should need nothing at this point
+
+	size = m.NeedSize("default")
+	if size.Bytes > 0 || size.Files > 0 || size.Directories > 0 {
+		t.Fatal("should need nothing after initial scan")
+	}
+
+	// Device2 should be out of sync, because they have reported no files.
+
+	comp := m.Completion(device2, "default")
+	if comp.CompletionPct > 0 {
+		t.Fatalf("device2 should need everything, but: %+v", comp)
+	}
+
+	// Reach into the model and grab the list of files. This is a bit ugly...
+
+	var files []protocol.FileInfo
+	m.fmut.RLock()
+	fs := m.folderFiles["default"]
+	fs.WithHave(protocol.LocalDeviceID, func(fi db.FileIntf) bool {
+		files = append(files, fi.(protocol.FileInfo))
+		return true
+	})
+	m.fmut.RUnlock()
+
+	if len(files) == 0 {
+		t.Fatal("need to have a least a few files")
+	}
+
+	// Lets pretend device2 has scanned the exact same data independently.
+
+	sid := device2.Short()
+	for i, orig := range files {
+		files[i].ModifiedBy = sid
+		files[i].Version = protocol.Vector{}.Update(sid)
+		files[i].Sequence += 12345
+		if !orig.Equivalent(files[i]) {
+			t.Fatal("the equivalence function is broken")
+		}
+	}
+
+	// Now we get the index message from device2
+
+	m.Index(device2, "default", files)
+
+	// Device1 should still need nothing
+
+	size = m.NeedSize("default")
+	if size.Bytes > 0 || size.Files > 0 || size.Directories > 0 {
+		t.Fatal("should need nothing after update from device2")
+	}
+
+	// Device2 should be 100% up to date
+
+	comp = m.Completion(device2, "default")
+	if comp.NeedBytes > 0 || comp.CompletionPct != 100 {
+		t.Fatalf("device2 should need nothing, but: %+v", comp)
+	}
+
+}
+
 func addFakeConn(m *Model, dev protocol.DeviceID) *fakeConnection {
 	fc := &fakeConnection{id: dev, model: m}
 	m.AddConnection(fc, protocol.HelloResult{})

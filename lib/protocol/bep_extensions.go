@@ -113,6 +113,54 @@ func (f FileInfo) WinsConflict(other FileInfo) bool {
 	return f.Version.Compare(other.Version) == ConcurrentGreater
 }
 
+// Equivalent returns true if the other FileInfo represents the exact same
+// file, directory or symlink as this FileInfo. This allows differences in
+// the device local data (ModifiedBy, Invalid, Version and Sequence fields).
+// The Permissions field is checked only if neither side has set
+// NoPermissions.
+func (f FileInfo) Equivalent(other FileInfo) bool {
+	if f.Name != other.Name {
+		return false
+	}
+	if f.Type != other.Type {
+		return false
+	}
+	if f.Size != other.Size {
+		return false
+	}
+	if !f.NoPermissions && !other.NoPermissions && f.Permissions != other.Permissions {
+		return false
+	}
+	if f.ModifiedS != other.ModifiedS {
+		return false
+	}
+	if f.ModifiedNs != other.ModifiedNs {
+		return false
+	}
+	if f.Deleted != other.Deleted {
+		return false
+	}
+	if f.SymlinkTarget != other.SymlinkTarget {
+		return false
+	}
+	if len(f.Blocks) != len(other.Blocks) {
+		return false
+	}
+	for i, b := range f.Blocks {
+		o := other.Blocks[i]
+		if b.Offset != o.Offset {
+			return false
+		}
+		if b.Size != o.Size {
+			return false
+		}
+		if !bytes.Equal(b.Hash, o.Hash) {
+			return false
+		}
+	}
+	return true
+}
+
 func (b BlockInfo) String() string {
 	return fmt.Sprintf("Block{%d/%d/%d/%x}", b.Offset, b.Size, b.WeakHash, b.Hash)
 }

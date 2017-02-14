@@ -456,9 +456,9 @@ nextFile:
 			if bytes.Equal(v.Device, device) {
 				have = true
 				haveVersion = v.Version
-				// XXX: This marks Concurrent (i.e. conflicting) changes as
-				// needs. Maybe we should do that, but it needs special
-				// handling in the puller.
+
+				// This also marks Concurrent (i.e. conflicting) changes as
+				// needs.
 				need = !v.Version.GreaterEqual(vl.Versions[0].Version)
 				break
 			}
@@ -489,7 +489,9 @@ nextFile:
 					panic(err)
 				}
 
-				gf, err := unmarshalTrunc(bs, truncate)
+				// Must use truncate=false here because we want to compare
+				// the block list later
+				gf, err := unmarshalTrunc(bs, false)
 				if err != nil {
 					panic(err)
 				}
@@ -502,6 +504,39 @@ nextFile:
 				if gf.IsDeleted() && !have {
 					// We don't need deleted files that we don't have
 					continue nextFile
+				}
+
+				if have {
+					// We already have a file, and now found the FileInfo
+					// that we supposedly need. We should check that it's
+					// not actually equivalent to the thing we already have
+					// before deciding that we actually *need* it.
+
+					fk = db.deviceKeyInto(fk[:cap(fk)], folder, device, name)
+					bs, err := t.Get(fk, nil)
+					if err != nil {
+						panic(err)
+					}
+
+					hf, err := unmarshalTrunc(bs, false)
+					if err != nil {
+						panic(err)
+					}
+
+					fi := hf.(protocol.FileInfo)
+					if fi.Equivalent(gf.(protocol.FileInfo)) {
+						continue nextFile
+					}
+				}
+
+				if truncate {
+					// We did the first unmarshal with truncate=false by
+					// necessity, but the caller only wants and expects a
+					// truncated version. We unmarshal again.
+					gf, err = unmarshalTrunc(bs, truncate)
+					if err != nil {
+						panic(err)
+					}
 				}
 
 				l.Debugf("need folder=%q device=%v name=%q need=%v have=%v haveV=%d globalV=%d", folder, protocol.DeviceIDFromBytes(device), name, need, have, haveVersion, vl.Versions[0].Version)

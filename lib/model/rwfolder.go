@@ -843,7 +843,7 @@ func (f *sendReceiveFolder) deleteFile(file protocol.FileInfo) {
 	}
 
 	cur, ok := f.model.CurrentFolderFile(f.folderID, file.Name)
-	if ok && f.inConflict(cur.Version, file.Version) {
+	if ok && f.inConflict(cur.Version, file.Version) && !cur.Equivalent(file) {
 		// There is a conflict here. Move the file to a conflict copy instead
 		// of deleting. Also merge with the version vector we had, to indicate
 		// we have resolved the conflict.
