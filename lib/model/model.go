@@ -502,7 +502,6 @@ func (m *Model) Completion(device protocol.DeviceID, folder string) FolderComple
 	counts := m.deviceDownloads[device].GetBlockCounts(folder)
 	m.pmut.RUnlock()
 
-	ignores := m.folderIgnores[folder]
 	var need, fileNeed, downloaded, deletes int64
 	rf.WithNeedTruncated(device, func(f db.FileIntf) bool {
 		if ignores.Match(f.FileName()).IsIgnored() {
