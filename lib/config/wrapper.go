@@ -14,7 +14,6 @@ import (
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/rand"
-	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/syncthing/syncthing/lib/util"
 )
 
@@ -52,9 +51,8 @@ type Wrapper struct {
 
 	deviceMap map[protocol.DeviceID]DeviceConfiguration
 	folderMap map[string]FolderConfiguration
-	replaces  chan Configuration
 	subs      []Committer
-	mut       sync.Mutex
+	mailbox   chan func()
 
 	requiresRestart uint32 // an atomic bool
 }
@@ -63,11 +61,11 @@ type Wrapper struct {
 // disk.
 func Wrap(path string, cfg Configuration) *Wrapper {
 	w := &Wrapper{
-		cfg:  cfg,
-		path: path,
-		mut:  sync.NewMutex(),
+		cfg:     cfg,
+		path:    path,
+		mailbox: make(chan func(), 16),
 	}
-	w.replaces = make(chan Configuration)
+	go w.Serve()
 	return w
 }
 
@@ -92,48 +90,56 @@ func (w *Wrapper) ConfigPath() string {
 	return w.path
 }
 
-// Stop stops the Serve() loop. Set and Replace operations will panic after a
-// Stop.
+func (w *Wrapper) Serve() {
+	for cmd := range w.mailbox {
+		cmd()
+	}
+}
+
+// Stop stops the Serve() loop.
 func (w *Wrapper) Stop() {
-	close(w.replaces)
+	close(w.mailbox)
 }
 
 // Subscribe registers the given handler to be called on any future
 // configuration changes.
 func (w *Wrapper) Subscribe(c Committer) {
-	w.mut.Lock()
-	w.subs = append(w.subs, c)
-	w.mut.Unlock()
+	w.mailbox <- func() {
+		w.subs = append(w.subs, c)
+	}
 }
 
 // Unsubscribe de-registers the given handler from any future calls to
 // configuration changes
 func (w *Wrapper) Unsubscribe(c Committer) {
-	w.mut.Lock()
-	for i := range w.subs {
-		if w.subs[i] == c {
-			copy(w.subs[i:], w.subs[i+1:])
-			w.subs[len(w.subs)-1] = nil
-			w.subs = w.subs[:len(w.subs)-1]
-			break
+	w.mailbox <- func() {
+		for i := range w.subs {
+			if w.subs[i] == c {
+				copy(w.subs[i:], w.subs[i+1:])
+				w.subs[len(w.subs)-1] = nil
+				w.subs = w.subs[:len(w.subs)-1]
+				break
+			}
 		}
 	}
-	w.mut.Unlock()
 }
 
 // RawCopy returns a copy of the currently wrapped Configuration object.
 func (w *Wrapper) RawCopy() Configuration {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	return w.cfg.Copy()
+	copyChan := make(chan Configuration)
+	w.mailbox <- func() {
+		copyChan <- w.cfg.Copy()
+	}
+	return <-copyChan
 }
 
 // Replace swaps the current configuration object for the given one.
 func (w *Wrapper) Replace(cfg Configuration) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-
-	return w.replaceLocked(cfg)
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		errChan <- w.replaceLocked(cfg)
+	}
+	return <-errChan
 }
 
 func (w *Wrapper) replaceLocked(to Configuration) error {
@@ -177,40 +183,43 @@ func (w *Wrapper) notifyListener(sub Committer, from, to Configuration) {
 // Devices returns a map of devices. Device structures should not be changed,
 // other than for the purpose of updating via SetDevice().
 func (w *Wrapper) Devices() map[protocol.DeviceID]DeviceConfiguration {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	if w.deviceMap == nil {
-		w.deviceMap = make(map[protocol.DeviceID]DeviceConfiguration, len(w.cfg.Devices))
-		for _, dev := range w.cfg.Devices {
-			w.deviceMap[dev.DeviceID] = dev
+	mapChan := make(chan map[protocol.DeviceID]DeviceConfiguration)
+	w.mailbox <- func() {
+		if w.deviceMap == nil {
+			w.deviceMap = make(map[protocol.DeviceID]DeviceConfiguration, len(w.cfg.Devices))
+			for _, dev := range w.cfg.Devices {
+				w.deviceMap[dev.DeviceID] = dev
+			}
 		}
+		mapChan <- w.deviceMap
 	}
-	return w.deviceMap
+	return <-mapChan
 }
 
 // SetDevices adds new devices to the configuration, or overwrites existing
 // devices with the same ID.
 func (w *Wrapper) SetDevices(devs []DeviceConfiguration) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-
-	newCfg := w.cfg.Copy()
-	var replaced bool
-	for oldIndex := range devs {
-		replaced = false
-		for newIndex := range newCfg.Devices {
-			if newCfg.Devices[newIndex].DeviceID == devs[oldIndex].DeviceID {
-				newCfg.Devices[newIndex] = devs[oldIndex]
-				replaced = true
-				break
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		newCfg := w.cfg.Copy()
+		var replaced bool
+		for oldIndex := range devs {
+			replaced = false
+			for newIndex := range newCfg.Devices {
+				if newCfg.Devices[newIndex].DeviceID == devs[oldIndex].DeviceID {
+					newCfg.Devices[newIndex] = devs[oldIndex]
+					replaced = true
+					break
+				}
+			}
+			if !replaced {
+				newCfg.Devices = append(newCfg.Devices, devs[oldIndex])
 			}
 		}
-		if !replaced {
-			newCfg.Devices = append(newCfg.Devices, devs[oldIndex])
-		}
-	}
 
-	return w.replaceLocked(newCfg)
+		errChan <- w.replaceLocked(newCfg)
+	}
+	return <-errChan
 }
 
 // SetDevice adds a new device to the configuration, or overwrites an existing
@@ -221,128 +230,157 @@ func (w *Wrapper) SetDevice(dev DeviceConfiguration) error {
 
 // RemoveDevice removes the device from the configuration
 func (w *Wrapper) RemoveDevice(id protocol.DeviceID) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-
-	newCfg := w.cfg.Copy()
-	removed := false
-	for i := range newCfg.Devices {
-		if newCfg.Devices[i].DeviceID == id {
-			newCfg.Devices = append(newCfg.Devices[:i], newCfg.Devices[i+1:]...)
-			removed = true
-			break
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		newCfg := w.cfg.Copy()
+		removed := false
+		for i := range newCfg.Devices {
+			if newCfg.Devices[i].DeviceID == id {
+				newCfg.Devices = append(newCfg.Devices[:i], newCfg.Devices[i+1:]...)
+				removed = true
+				break
+			}
 		}
-	}
-	if !removed {
-		return nil
-	}
+		if !removed {
+			errChan <- nil
+			return
+		}
 
-	return w.replaceLocked(newCfg)
+		errChan <- w.replaceLocked(newCfg)
+	}
+	return <-errChan
 }
 
 // Folders returns a map of folders. Folder structures should not be changed,
 // other than for the purpose of updating via SetFolder().
 func (w *Wrapper) Folders() map[string]FolderConfiguration {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	if w.folderMap == nil {
-		w.folderMap = make(map[string]FolderConfiguration, len(w.cfg.Folders))
-		for _, fld := range w.cfg.Folders {
-			w.folderMap[fld.ID] = fld
+	mapChan := make(chan map[string]FolderConfiguration)
+	w.mailbox <- func() {
+		if w.folderMap == nil {
+			w.folderMap = make(map[string]FolderConfiguration, len(w.cfg.Folders))
+			for _, fld := range w.cfg.Folders {
+				w.folderMap[fld.ID] = fld
+			}
 		}
+		mapChan <- w.folderMap
 	}
-	return w.folderMap
+	return <-mapChan
 }
 
 // SetFolder adds a new folder to the configuration, or overwrites an existing
 // folder with the same ID.
 func (w *Wrapper) SetFolder(fld FolderConfiguration) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-
-	newCfg := w.cfg.Copy()
-	replaced := false
-	for i := range newCfg.Folders {
-		if newCfg.Folders[i].ID == fld.ID {
-			newCfg.Folders[i] = fld
-			replaced = true
-			break
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		newCfg := w.cfg.Copy()
+		replaced := false
+		for i := range newCfg.Folders {
+			if newCfg.Folders[i].ID == fld.ID {
+				newCfg.Folders[i] = fld
+				replaced = true
+				break
+			}
 		}
-	}
-	if !replaced {
-		newCfg.Folders = append(w.cfg.Folders, fld)
-	}
+		if !replaced {
+			newCfg.Folders = append(w.cfg.Folders, fld)
+		}
 
-	return w.replaceLocked(newCfg)
+		errChan <- w.replaceLocked(newCfg)
+	}
+	return <-errChan
 }
 
 // Options returns the current options configuration object.
 func (w *Wrapper) Options() OptionsConfiguration {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	return w.cfg.Options
+	resultChan := make(chan OptionsConfiguration)
+	w.mailbox <- func() {
+		resultChan <- w.cfg.Options
+	}
+	return <-resultChan
 }
 
 // SetOptions replaces the current options configuration object.
 func (w *Wrapper) SetOptions(opts OptionsConfiguration) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	newCfg := w.cfg.Copy()
-	newCfg.Options = opts
-	return w.replaceLocked(newCfg)
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		newCfg := w.cfg.Copy()
+		newCfg.Options = opts
+		errChan <- w.replaceLocked(newCfg)
+	}
+	return <-errChan
 }
 
 // GUI returns the current GUI configuration object.
 func (w *Wrapper) GUI() GUIConfiguration {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	return w.cfg.GUI
+	resultChan := make(chan GUIConfiguration)
+	w.mailbox <- func() {
+		resultChan <- w.cfg.GUI
+	}
+	return <-resultChan
 }
 
 // SetGUI replaces the current GUI configuration object.
 func (w *Wrapper) SetGUI(gui GUIConfiguration) error {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	newCfg := w.cfg.Copy()
-	newCfg.GUI = gui
-	return w.replaceLocked(newCfg)
+	errChan := make(chan error)
+	w.mailbox <- func() {
+		newCfg := w.cfg.Copy()
+		newCfg.GUI = gui
+		errChan <- w.replaceLocked(newCfg)
+	}
+	return <-errChan
 }
 
 // IgnoredDevice returns whether or not connection attempts from the given
 // device should be silently ignored.
 func (w *Wrapper) IgnoredDevice(id protocol.DeviceID) bool {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	for _, device := range w.cfg.IgnoredDevices {
-		if device == id {
-			return true
+	resultChan := make(chan bool)
+	w.mailbox <- func() {
+		for _, device := range w.cfg.IgnoredDevices {
+			if device == id {
+				resultChan <- true
+				return
+			}
 		}
+		resultChan <- false
 	}
-	return false
+	return <-resultChan
 }
 
 // Device returns the configuration for the given device and an "ok" bool.
 func (w *Wrapper) Device(id protocol.DeviceID) (DeviceConfiguration, bool) {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	for _, device := range w.cfg.Devices {
-		if device.DeviceID == id {
-			return device, true
+	resultChan := make(chan *DeviceConfiguration)
+	w.mailbox <- func() {
+		for _, device := range w.cfg.Devices {
+			if device.DeviceID == id {
+				resultChan <- &device
+				return
+			}
 		}
+		resultChan <- nil
 	}
-	return DeviceConfiguration{}, false
+	res := <-resultChan
+	if res == nil {
+		return DeviceConfiguration{}, false
+	}
+	return *res, true
 }
 
 // Folder returns the configuration for the given folder and an "ok" bool.
 func (w *Wrapper) Folder(id string) (FolderConfiguration, bool) {
-	w.mut.Lock()
-	defer w.mut.Unlock()
-	for _, folder := range w.cfg.Folders {
-		if folder.ID == id {
-			return folder, true
+	resultChan := make(chan *FolderConfiguration)
+	w.mailbox <- func() {
+		for _, folder := range w.cfg.Folders {
+			if folder.ID == id {
+				resultChan <- &folder
+			}
 		}
+		resultChan <- nil
 	}
-	return FolderConfiguration{}, false
+	res := <-resultChan
+	if res == nil {
+		return FolderConfiguration{}, false
+	}
+	return *res, true
 }
 
 // Save writes the configuration to disk, and generates a ConfigSaved event.
