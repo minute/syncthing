@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/opentracing/opentracing-go"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
 )
@@ -44,6 +45,8 @@ type sharedPullerState struct {
 	available         []int32      // Indexes of the blocks that are available in the temporary file
 	availableUpdated  time.Time    // Time when list of available blocks was last updated
 	mut               sync.RWMutex // Protects the above
+
+	span opentracing.Span
 }
 
 // A momentary state representing the progress of the puller

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/events"
@@ -322,6 +323,10 @@ func (f *sendReceiveFolder) String() string {
 // might have failed). One puller iteration handles all files currently
 // flagged as needed in the folder.
 func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
+	span := opentracing.StartSpan("pullerIteration")
+	span.SetTag("folder", f.folderID)
+	defer span.Finish()
+
 	pullChan := make(chan pullBlockState)
 	copyChan := make(chan copyBlocksState)
 	finisherChan := make(chan *sharedPullerState)
@@ -378,6 +383,7 @@ func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
 	// (directories, symlinks and deletes) goes into the "process directly"
 	// pile.
 
+	nspan := opentracing.StartSpan("withNeed", opentracing.ChildOf(span.Context()))
 	folderFiles.WithNeed(protocol.LocalDeviceID, func(intf db.FileIntf) bool {
 		if shouldIgnore(intf, ignores, f.IgnoreDelete) {
 			return true
@@ -419,11 +425,14 @@ func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
 
 		return true
 	})
+	nspan.Finish()
 
 	// Sort the "process directly" pile by number of path components. This
 	// ensures that we handle parents before children.
 
+	nspan = opentracing.StartSpan("sort", opentracing.ChildOf(span.Context()))
 	sort.Sort(byComponentCount(processDirectly))
+	nspan.Finish()
 
 	// Process the list.
 
@@ -431,7 +440,9 @@ func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
 	dirDeletions := []protocol.FileInfo{}
 	buckets := map[string][]protocol.FileInfo{}
 
+	nspan = opentracing.StartSpan("processDirectly", opentracing.ChildOf(span.Context()))
 	for _, fi := range processDirectly {
+		nspan.LogEventWithPayload("file", fi.Name)
 		// Verify that the thing we are handling lives inside a directory,
 		// and not a symlink or empty space.
 		if err := osutil.TraversesSymlink(f.dir, filepath.Dir(fi.Name)); err != nil {
@@ -473,9 +484,11 @@ func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
 			panic("unhandleable item type, can't happen")
 		}
 	}
+	nspan.Finish()
 
 	// Now do the file queue. Reorder it according to configuration.
 
+	nspan = opentracing.StartSpan("shuffle", opentracing.ChildOf(span.Context()))
 	switch f.Order {
 	case config.OrderRandom:
 		f.queue.Shuffle()
@@ -490,9 +503,11 @@ func (f *sendReceiveFolder) pullerIteration(ignores *ignore.Matcher) int {
 	case config.OrderNewestFirst:
 		f.queue.SortNewestFirst()
 	}
+	nspan.Finish()
 
 	// Process the file queue.
 
+	nspan = opentracing.StartSpan("handle", opentracing.ChildOf(span.Context()))
 nextFile:
 	for {
 		select {
@@ -506,6 +521,8 @@ nextFile:
 		if !ok {
 			break
 		}
+
+		nspan.LogEventWithPayload("file", fileName)
 
 		fi, ok := f.model.CurrentGlobalFile(f.folderID, fileName)
 		if !ok {
@@ -553,7 +570,7 @@ nextFile:
 		}
 
 		// Handle the file normally, by coping and pulling, etc.
-		f.handleFile(fi, copyChan, finisherChan)
+		f.handleFile(fi, copyChan, finisherChan, nspan.Context())
 	}
 
 	// Signal copy and puller routines that we are done with the in data for
@@ -579,6 +596,7 @@ nextFile:
 		l.Debugln("Deleting dir", dir.Name)
 		f.deleteDir(dir, ignores)
 	}
+	nspan.Finish()
 
 	// Wait for db updates to complete
 	close(f.dbUpdates)
@@ -1002,12 +1020,17 @@ func (f *sendReceiveFolder) renameFile(source, target protocol.FileInfo) {
 
 // handleFile queues the copies and pulls as necessary for a single new or
 // changed file.
-func (f *sendReceiveFolder) handleFile(file protocol.FileInfo, copyChan chan<- copyBlocksState, finisherChan chan<- *sharedPullerState) {
+func (f *sendReceiveFolder) handleFile(file protocol.FileInfo, copyChan chan<- copyBlocksState, finisherChan chan<- *sharedPullerState, ctx opentracing.SpanContext) {
+	span := opentracing.StartSpan("handleFile", opentracing.ChildOf(ctx))
+	span.SetTag("name", file.Name)
 	curFile, hasCurFile := f.model.CurrentFolderFile(f.folderID, file.Name)
 
 	have, need := scanner.BlockDiff(curFile.Blocks, file.Blocks)
 
 	if hasCurFile && len(need) == 0 {
+		span.LogEvent("shortcut")
+		defer span.Finish()
+
 		// We are supposed to copy the entire file, and then fetch nothing. We
 		// are only updating metadata, so we don't actually *need* to make the
 		// copy.
@@ -1061,6 +1084,8 @@ func (f *sendReceiveFolder) handleFile(file protocol.FileInfo, copyChan chan<- c
 		if info, err := f.mtimeFS.Lstat(realName); err == nil {
 			if !info.ModTime().Equal(curFile.ModTime()) || info.Size() != curFile.Size {
 				l.Debugln("file modified but not rescanned; not pulling:", realName)
+				span.LogEvent("needRescan")
+				defer span.Finish()
 				// Scan() is synchronous (i.e. blocks until the scan is
 				// completed and returns an error), but a scan can't happen
 				// while we're in the puller routine. Request the scan in the
@@ -1084,6 +1109,7 @@ func (f *sendReceiveFolder) handleFile(file protocol.FileInfo, copyChan chan<- c
 	// reuse.
 	tempBlocks, err := scanner.HashFile(f.ctx, fs.DefaultFilesystem, tempName, protocol.BlockSize, nil, false)
 	if err == nil {
+		span.LogEvent("reuse")
 		// Check for any reusable blocks in the temp file
 		tempCopyBlocks, _ := scanner.BlockDiff(tempBlocks, file.Blocks)
 
@@ -1155,6 +1181,7 @@ func (f *sendReceiveFolder) handleFile(file protocol.FileInfo, copyChan chan<- c
 		mut:              sync.NewRWMutex(),
 		sparse:           !f.DisableSparseFiles,
 		created:          time.Now(),
+		span:             span,
 	}
 
 	l.Debugf("%v need file %s; copy %d, reused %v", f, file.Name, len(blocks), len(reused))
@@ -1223,6 +1250,7 @@ func (f *sendReceiveFolder) copierRoutine(in <-chan copyBlocksState, pullChan ch
 		var weakHashFinder *weakhash.Finder
 
 		if weakhash.Enabled {
+			span := opentracing.StartSpan("weakhash", opentracing.ChildOf(state.span.Context()))
 			blocksPercentChanged := 0
 			if tot := len(state.file.Blocks); tot > 0 {
 				blocksPercentChanged = (tot - state.have) * 100 / tot
@@ -1247,6 +1275,7 @@ func (f *sendReceiveFolder) copierRoutine(in <-chan copyBlocksState, pullChan ch
 			} else {
 				l.Debugf("not weak hashing %s. not enough changed %.02f < %d", state.file.Name, blocksPercentChanged, f.WeakHashThresholdPct)
 			}
+			span.Finish()
 		} else {
 			l.Debugf("not weak hashing %s. weak hashing disabled", state.file.Name)
 		}
@@ -1266,15 +1295,24 @@ func (f *sendReceiveFolder) copierRoutine(in <-chan copyBlocksState, pullChan ch
 
 			buf = buf[:int(block.Size)]
 
+			var span opentracing.Span
 			found, err := weakHashFinder.Iterate(block.WeakHash, buf, func(offset int64) bool {
+				if span == nil {
+					span = opentracing.StartSpan("copyBlock", opentracing.ChildOf(state.span.Context()))
+					span.SetTag("offset", block.Offset)
+					span.SetTag("size", block.Size)
+					span.SetTag("weakhashHit", true)
+				}
+
 				if _, err := scanner.VerifyBuffer(buf, block); err != nil {
+					span.SetTag("weakhashUsed", false)
 					return true
 				}
 
+				span.SetTag("weakhashUsed", true)
 				_, err = dstFd.WriteAt(buf, block.Offset)
 				if err != nil {
 					state.fail("dst write", err)
-
 				}
 				if offset == block.Offset {
 					state.copiedFromOrigin()
@@ -1290,6 +1328,13 @@ func (f *sendReceiveFolder) copierRoutine(in <-chan copyBlocksState, pullChan ch
 
 			if !found {
 				found = f.model.finder.Iterate(folders, block.Hash, func(folder, file string, index int32) bool {
+					if span == nil {
+						span = opentracing.StartSpan("copyBlock", opentracing.ChildOf(state.span.Context()))
+						span.SetTag("offset", block.Offset)
+						span.SetTag("size", block.Size)
+						span.SetTag("weakhash", false)
+					}
+
 					inFile, err := rootedJoinedPath(folderRoots[folder], file)
 					if err != nil {
 						return false
@@ -1331,7 +1376,16 @@ func (f *sendReceiveFolder) copierRoutine(in <-chan copyBlocksState, pullChan ch
 			}
 
 			if state.failed() != nil {
+				if span != nil {
+					span.SetTag("failed", true)
+					span.Finish()
+				}
 				break
+			}
+
+			if span != nil {
+				span.SetTag("copied", found)
+				span.Finish()
 			}
 
 			if !found {
@@ -1376,7 +1430,15 @@ func (f *sendReceiveFolder) pullerRoutine(in <-chan pullBlockState, out chan<- *
 
 		var lastError error
 		candidates := f.model.Availability(f.folderID, state.file.Name, state.file.Version, state.block)
+		var cs opentracing.Span
 		for {
+			if cs != nil {
+				cs.Finish()
+			}
+			cs = opentracing.StartSpan("pullBlock", opentracing.ChildOf(state.span.Context()))
+			cs.SetTag("offset", state.block.Offset)
+			cs.SetTag("size", state.block.Size)
+
 			// Select the least busy device to pull the block from. If we found no
 			// feasible device at all, fail the block (and in the long run, the
 			// file).
@@ -1419,11 +1481,15 @@ func (f *sendReceiveFolder) pullerRoutine(in <-chan pullBlockState, out chan<- *
 			}
 			break
 		}
+		if cs != nil {
+			cs.Finish()
+		}
 		out <- state.sharedPullerState
 	}
 }
 
 func (f *sendReceiveFolder) performFinish(state *sharedPullerState) error {
+	defer state.span.Finish()
 	// Set the correct permission bits on the new file
 	if !f.ignorePermissions(state.file) {
 		if err := os.Chmod(state.tempName, os.FileMode(state.file.Permissions&0777)); err != nil {
