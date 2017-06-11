@@ -17,10 +17,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/db"
-	"github.com/syncthing/syncthing/lib/fs"
-	"github.com/syncthing/syncthing/lib/ignore"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/scanner"
@@ -40,8 +37,8 @@ type rescanRequest struct {
 // for the duration.
 type folderScanner struct {
 	sync.Mutex
-	cfg config.FolderConfiguration
-	folderScannerConfig
+	folderDependencies
+
 	timer  *time.Timer
 	now    chan rescanRequest
 	delay  chan time.Duration
@@ -49,40 +46,16 @@ type folderScanner struct {
 	cancel context.CancelFunc
 }
 
-type dbPrefixIterator interface {
-	iterate(prefix string, iterator db.Iterator)
-}
-
-type dbUpdater interface {
-	update(files []protocol.FileInfo)
-}
-
-type folderScannerConfig struct {
-	// mandatory depdendencies
-	shortID          protocol.ShortID
-	currentFiler     scanner.CurrentFiler
-	filesystem       fs.Filesystem
-	ignores          *ignore.Matcher
-	stateTracker     *stateTracker
-	dbUpdater        dbUpdater
-	dbPrefixIterator dbPrefixIterator
-
-	// optional hooks
-	ignoresChanged func()
-	scanCompleted  func()
-}
-
-func newFolderScanner(ctx context.Context, cfg config.FolderConfiguration, fsCfg folderScannerConfig) *folderScanner {
+func newFolderScanner(ctx context.Context, deps folderDependencies) *folderScanner {
 	ctx, cancel := context.WithCancel(ctx)
 	return &folderScanner{
-		Mutex:               sync.NewMutex(),
-		cfg:                 cfg,
-		folderScannerConfig: fsCfg,
-		ctx:                 ctx,
-		cancel:              cancel,
-		timer:               time.NewTimer(time.Millisecond), // The first scan should be done immediately.
-		now:                 make(chan rescanRequest),
-		delay:               make(chan time.Duration),
+		Mutex:              sync.NewMutex(),
+		folderDependencies: deps,
+		ctx:                ctx,
+		cancel:             cancel,
+		timer:              time.NewTimer(time.Millisecond), // The first scan should be done immediately.
+		now:                make(chan rescanRequest),
+		delay:              make(chan time.Duration),
 	}
 }
 
@@ -134,8 +107,10 @@ func (f *folderScanner) scan(ctx context.Context, subDirs []string) (err error) 
 		return err
 	}
 
+	f.stateTracker.clearError()
+
 	oldHash := f.ignores.Hash()
-	if err := f.ignores.Load(filepath.Join(f.cfg.Path(), ".stignore")); err != nil && !os.IsNotExist(err) {
+	if err := f.ignores.Load(filepath.Join(f.folderCfg.Path(), ".stignore")); err != nil && !os.IsNotExist(err) {
 		err = fmt.Errorf("loading ignores: %v", err)
 		f.stopWithError(err)
 		return err
@@ -152,16 +127,13 @@ func (f *folderScanner) scan(ctx context.Context, subDirs []string) (err error) 
 		return err
 	}
 
-	if f.scanCompleted != nil {
-		f.scanCompleted() // TODO move to the state tracker
-	}
 	f.stateTracker.setState(FolderIdle)
 
 	// Check if the ignore patterns changed as part of scanning this folder.
 	// If they did we should schedule a pull of the folder so that we
 	// request things we might have suddenly become unignored and so on.
 	if f.ignores.Hash() != oldHash && f.ignoresChanged != nil {
-		f.ignoresChanged()
+		f.ignoresChanged <- time.Now()
 	}
 
 	return nil
@@ -169,19 +141,19 @@ func (f *folderScanner) scan(ctx context.Context, subDirs []string) (err error) 
 
 func (f *folderScanner) scanForAdditions(ctx context.Context, subDirs []string) error {
 	fchan, err := scanner.Walk(ctx, scanner.Config{
-		Folder:                f.cfg.ID,
-		Dir:                   f.cfg.Path(),
+		Folder:                f.folderCfg.ID,
+		Dir:                   f.folderCfg.Path(),
 		Subs:                  subDirs,
 		Matcher:               f.ignores,
 		BlockSize:             protocol.BlockSize,
 		TempLifetime:          24 * time.Hour, // XXX time.Duration(m.cfg.Options().KeepTemporariesH) * time.Hour,
 		CurrentFiler:          f.currentFiler,
 		Filesystem:            f.filesystem,
-		IgnorePerms:           f.cfg.IgnorePerms,
-		AutoNormalize:         f.cfg.AutoNormalize,
+		IgnorePerms:           f.folderCfg.IgnorePerms,
+		AutoNormalize:         f.folderCfg.AutoNormalize,
 		Hashers:               f.numHashers(),
-		ShortID:               f.shortID,
-		ProgressTickIntervalS: f.cfg.ScanProgressIntervalS,
+		ShortID:               f.deviceID.Short(),
+		ProgressTickIntervalS: f.folderCfg.ScanProgressIntervalS,
 		UseWeakHashes:         weakhash.Enabled,
 	})
 
@@ -263,7 +235,7 @@ func (f *folderScanner) scanForDeletes(ctx context.Context, subDirs []string) er
 					Size:          fi.Size,
 					ModifiedS:     fi.ModifiedS,
 					ModifiedNs:    fi.ModifiedNs,
-					ModifiedBy:    f.shortID,
+					ModifiedBy:    f.deviceID.Short(),
 					Permissions:   fi.Permissions,
 					NoPermissions: fi.NoPermissions,
 					Invalid:       true,
@@ -276,7 +248,7 @@ func (f *folderScanner) scanForDeletes(ctx context.Context, subDirs []string) er
 				// The file is valid and not deleted. Lets check if it's
 				// still here.
 
-				if _, err := f.filesystem.Lstat(filepath.Join(f.cfg.Path(), fi.Name)); err != nil {
+				if _, err := f.filesystem.Lstat(filepath.Join(f.folderCfg.Path(), fi.Name)); err != nil {
 					// We don't specifically verify that the error is
 					// os.IsNotExist because there is a corner case when a
 					// directory is suddenly transformed into a file. When that
@@ -290,9 +262,9 @@ func (f *folderScanner) scanForDeletes(ctx context.Context, subDirs []string) er
 						Size:       0,
 						ModifiedS:  fi.ModifiedS,
 						ModifiedNs: fi.ModifiedNs,
-						ModifiedBy: f.shortID,
+						ModifiedBy: f.deviceID.Short(),
 						Deleted:    true,
-						Version:    fi.Version.Update(f.shortID),
+						Version:    fi.Version.Update(f.deviceID.Short()),
 					}
 
 					batch = append(batch, nf)
@@ -317,11 +289,11 @@ func (f *folderScanner) scanForDeletes(ctx context.Context, subDirs []string) er
 }
 
 func (f *folderScanner) reschedule() {
-	if f.cfg.RescanIntervalS == 0 {
+	if f.folderCfg.RescanIntervalS == 0 {
 		return
 	}
 	// Sleep a random time between 3/4 and 5/4 of the configured interval.
-	interval := time.Duration(f.cfg.RescanIntervalS) * time.Second
+	interval := time.Duration(f.folderCfg.RescanIntervalS) * time.Second
 	sleep := time.Duration(int64(interval)*3 + rand.Int63n(2*int64(interval))/4)
 	l.Debugln(f, "next rescan in", sleep)
 	f.timer.Reset(interval)
@@ -362,9 +334,9 @@ func (f *folderScanner) cleanSubDirs(subDirs []string) ([]string, error) {
 // numHashers returns the number of hasher routines to use for a given folder,
 // taking into account configuration and available CPU cores.
 func (f *folderScanner) numHashers() int {
-	if f.cfg.Hashers > 0 {
+	if f.folderCfg.Hashers > 0 {
 		// Specific value set in the config, use that.
-		return f.cfg.Hashers
+		return f.folderCfg.Hashers
 	}
 
 	if runtime.GOOS == "windows" || runtime.GOOS == "darwin" {
@@ -388,6 +360,6 @@ func (f *folderScanner) healthCheck() error {
 }
 
 func (f *folderScanner) stopWithError(err error) {
-	l.Infof("Stopping folder %s due to error: %s", f.cfg.Description(), err)
+	l.Infof("Stopping folder %s due to error: %s", f.folderCfg.Description(), err)
 	f.stateTracker.setError(err)
 }

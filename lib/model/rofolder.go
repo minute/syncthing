@@ -8,10 +8,9 @@ package model
 
 import (
 	"context"
+	"time"
 
 	"github.com/syncthing/syncthing/lib/config"
-	"github.com/syncthing/syncthing/lib/fs"
-	"github.com/syncthing/syncthing/lib/versioner"
 )
 
 func init() {
@@ -20,30 +19,11 @@ func init() {
 
 type sendOnlyFolder struct {
 	*folderScanner
-	*stateTracker
-	ctx    context.Context
-	cancel context.CancelFunc
 }
 
-func newSendOnlyFolder(model *Model, cfg config.FolderConfiguration, _ versioner.Versioner, mtimeFS *fs.MtimeFS) service {
-	ctx, cancel := context.WithCancel(context.Background())
-
-	st := newStateTracker(cfg.ID)
-	fsCfg := folderScannerConfig{
-		shortID:          model.id.Short(),
-		currentFiler:     cFiler{model, cfg.ID},
-		filesystem:       mtimeFS,
-		ignores:          nil, // XXX
-		stateTracker:     st,
-		dbUpdater:        nil, // XXX
-		dbPrefixIterator: nil, // XXX
-	}
-
+func newSendOnlyFolder(deps folderDependencies) service {
 	return &sendOnlyFolder{
-		folderScanner: newFolderScanner(ctx, cfg, fsCfg),
-		stateTracker:  st,
-		ctx:           ctx,
-		cancel:        cancel,
+		folderScanner: newFolderScanner(context.Background(), deps),
 	}
 }
 
@@ -56,4 +36,8 @@ func (f *sendOnlyFolder) IndexUpdated() {
 
 func (f *sendOnlyFolder) Jobs() ([]string, []string) {
 	return nil, nil
+}
+
+func (f *sendOnlyFolder) getState() (folderState, time.Time, error) {
+	return f.folderScanner.folderDependencies.stateTracker.getState() // XXX: trololol
 }

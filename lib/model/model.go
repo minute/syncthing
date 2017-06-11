@@ -24,7 +24,6 @@ import (
 	"github.com/syncthing/syncthing/lib/connections"
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/events"
-	"github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/ignore"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
@@ -51,9 +50,6 @@ type service interface {
 	Stop()
 
 	getState() (folderState, time.Time, error)
-	setState(state folderState)
-	clearError()
-	setError(err error)
 }
 
 type Availability struct {
@@ -94,12 +90,6 @@ type Model struct {
 	remotePausedFolders map[protocol.DeviceID][]string // deviceID -> folders
 	pmut                sync.RWMutex                   // protects the above
 }
-
-type folderFactory func(*Model, config.FolderConfiguration, versioner.Versioner, *fs.MtimeFS) service
-
-var (
-	folderFactories = make(map[config.FolderType]folderFactory, 0)
-)
 
 var (
 	errFolderPathEmpty     = errors.New("folder path empty")

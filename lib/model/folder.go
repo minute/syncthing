@@ -9,7 +9,40 @@ package model
 import (
 	"context"
 	"time"
+
+	"github.com/syncthing/syncthing/lib/config"
+	"github.com/syncthing/syncthing/lib/db"
+	"github.com/syncthing/syncthing/lib/fs"
+	"github.com/syncthing/syncthing/lib/ignore"
+	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/scanner"
 )
+
+type folderFactory func(deps folderDependencies) service
+
+var (
+	folderFactories = make(map[config.FolderType]folderFactory, 0)
+)
+
+type dbPrefixIterator interface {
+	iterate(prefix string, iterator db.Iterator)
+}
+
+type dbUpdater interface {
+	update(files []protocol.FileInfo)
+}
+
+type folderDependencies struct {
+	deviceID         protocol.DeviceID
+	folderCfg        config.FolderConfiguration
+	currentFiler     scanner.CurrentFiler
+	filesystem       fs.Filesystem
+	ignores          *ignore.Matcher
+	stateTracker     *stateTracker
+	dbUpdater        dbUpdater
+	dbPrefixIterator dbPrefixIterator
+	ignoresChanged   chan<- time.Time
+}
 
 type folder struct {
 	stateTracker
