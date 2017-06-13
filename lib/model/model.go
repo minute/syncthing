@@ -241,7 +241,17 @@ func (m *Model) startFolderLocked(folder string) config.FolderType {
 		}
 	}
 
-	p := folderFactory(m, cfg, ver, fs.MtimeFS())
+	p := folderFactory(folderDependencies{
+		deviceID:         m.id,
+		folderCfg:        cfg,
+		currentFiler:     cf,
+		filesystem:       fs.MtimeFS(),
+		ignores:          igns,
+		stateTracker:     st,
+		dbUpdater:        fs,
+		dbPrefixIterator: fs,
+		ignoresChanged:   nil,
+	})
 	m.folderRunners[folder] = p
 
 	m.warnAboutOverwritingProtectedFiles(folder)

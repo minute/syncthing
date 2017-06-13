@@ -25,6 +25,8 @@ var (
 )
 
 type dbPrefixIterator interface {
+	// XXX: This interface should not depend on db.Iterator (meaning db.FileIntf)
+	// or we have the coupling anyway and might as well just take a *db.DB
 	iterate(prefix string, iterator db.Iterator)
 }
 

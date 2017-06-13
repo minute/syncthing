@@ -68,7 +68,7 @@ func (f *folderScanner) Scan(subdirs []string) error {
 	return <-req.err
 }
 
-func (f *folderScanner) DelayScan(next time.Duration) {
+func (f *folderScanner) Delay(next time.Duration) {
 	f.delay <- next
 }
 
