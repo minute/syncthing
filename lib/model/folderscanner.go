@@ -103,31 +103,21 @@ func (f *folderScanner) scan(ctx context.Context, subDirs []string) (err error) 
 	}
 
 	if err := f.healthCheck(); err != nil {
-		f.stopWithError(err)
 		return err
 	}
-
-	f.stateTracker.clearError()
 
 	oldHash := f.ignores.Hash()
 	if err := f.ignores.Load(filepath.Join(f.folderCfg.Path(), ".stignore")); err != nil && !os.IsNotExist(err) {
 		err = fmt.Errorf("loading ignores: %v", err)
-		f.stopWithError(err)
 		return err
 	}
 
-	f.stateTracker.setState(FolderScanning)
-
 	if err := f.scanForAdditions(ctx, subDirs); err != nil {
-		f.stopWithError(err)
 		return err
 	}
 	if err := f.scanForDeletes(ctx, subDirs); err != nil {
-		f.stopWithError(err)
 		return err
 	}
-
-	f.stateTracker.setState(FolderIdle)
 
 	// Check if the ignore patterns changed as part of scanning this folder.
 	// If they did we should schedule a pull of the folder so that we
@@ -357,9 +347,4 @@ func (f *folderScanner) numHashers() int {
 
 func (f *folderScanner) healthCheck() error {
 	return nil // XXX
-}
-
-func (f *folderScanner) stopWithError(err error) {
-	l.Infof("Stopping folder %s due to error: %s", f.folderCfg.Description(), err)
-	f.stateTracker.setError(err)
 }

@@ -77,15 +77,3 @@ func (f *folder) Jobs() ([]string, []string) {
 }
 
 func (f *folder) BringToFront(string) {}
-
-func (f *folder) scanSubdirs(subDirs []string) error {
-	if err := f.model.internalScanFolderSubdirs(f.ctx, f.folderID, subDirs); err != nil {
-		// Potentially sets the error twice, once in the scanner just
-		// by doing a check, and once here, if the error returned is
-		// the same one as returned by CheckFolderHealth, though
-		// duplicate set is handled by setError.
-		f.setError(err)
-		return err
-	}
-	return nil
-}
