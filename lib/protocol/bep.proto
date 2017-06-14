@@ -155,7 +155,7 @@ message EncryptedIndexUpdate {
 message EncryptedFileInfo {
     string identifier         = 1;
     bytes  encrypted_fileinfo = 2;
-    bytes  iv                 = 3;
+    bytes  nonce              = 3;
     int32  num_blocks         = 4;
     Vector version            = 5 [(gogoproto.nullable) = false];
     int64  sequence           = 6;
@@ -189,10 +189,10 @@ message Response {
 }
 
 message EncryptedResponse {
-    int32     id   = 1 [(gogoproto.customname) = "ID"];
-    bytes     data = 2;
-    bytes     iv   = 3;
-    ErrorCode code = 4;
+    int32     id    = 1 [(gogoproto.customname) = "ID"];
+    bytes     data  = 2;
+    bytes     nonce = 3;
+    ErrorCode code  = 4;
 }
 
 enum ErrorCode {

@@ -199,6 +199,15 @@
 			"allfiles": true
 		},
 		{
+			"importpath": "github.com/golang/crypto/nacl/secretbox",
+			"repository": "https://github.com/golang/crypto",
+			"vcs": "git",
+			"revision": "850760c427c516be930bc91280636328f1a62286",
+			"branch": "master",
+			"path": "/nacl/secretbox",
+			"notests": true
+		},
+		{
 			"importpath": "github.com/golang/groupcache/lru",
 			"repository": "https://github.com/golang/groupcache",
 			"vcs": "git",
@@ -455,6 +464,15 @@
 			"revision": "c78caca803c95773f48a844d3dcab04b9bc4d6dd",
 			"branch": "master",
 			"path": "/pbkdf2",
+			"notests": true
+		},
+		{
+			"importpath": "golang.org/x/crypto/poly1305",
+			"repository": "https://go.googlesource.com/crypto",
+			"vcs": "git",
+			"revision": "850760c427c516be930bc91280636328f1a62286",
+			"branch": "master",
+			"path": "/poly1305",
 			"notests": true
 		},
 		{
