@@ -241,6 +241,33 @@ func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, l
 	}
 }
 
+func (db *Instance) withHaveIt(folder, device, prefix []byte) tmpit {
+	t := db.newReadOnlyTransaction()
+	dbi := t.NewIterator(util.BytesPrefix(db.deviceKey(folder, device, prefix)[:keyPrefixLen+keyFolderLen+keyDeviceLen+len(prefix)]), nil)
+
+	slashedPrefix := prefix
+	if !bytes.HasSuffix(prefix, []byte{'/'}) {
+		slashedPrefix = append(slashedPrefix, '/')
+	}
+
+	it := &tmpitimp{
+		it: dbi,
+		filter: func(it iterator.Iterator) bool {
+			name := db.deviceKeyName(dbi.Key())
+			if len(prefix) > 0 && !bytes.Equal(name, prefix) && !bytes.HasPrefix(name, slashedPrefix) {
+				return false
+			}
+			return true
+		},
+		close: func() {
+			dbi.Release()
+			t.close()
+		},
+	}
+
+	return it
+}
+
 func (db *Instance) withHave(folder, device, prefix []byte, truncate bool, fn Iterator) {
 	t := db.newReadOnlyTransaction()
 	defer t.close()

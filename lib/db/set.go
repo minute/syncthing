@@ -20,6 +20,7 @@ import (
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
 )
 
 type FileSet struct {
@@ -50,6 +51,56 @@ type FileIntf interface {
 // FileInfoTruncated (depending on the method) and returns true to
 // continue iteration, false to stop.
 type Iterator func(f FileIntf) bool
+
+type tmpit interface {
+	Next() bool
+	Error() error
+	FileInfo() (protocol.FileInfo, error)
+	FileInfoTruncated() (FileInfoTruncated, error)
+	Close()
+}
+
+type tmpitimp struct {
+	it     iterator.Iterator
+	filter func(iterator.Iterator) bool
+	close  func()
+}
+
+func (i *tmpitimp) Next() bool {
+	for {
+		if !i.it.Next() {
+			return false
+		}
+		if !i.filter(i.it) {
+			continue
+		}
+		return true
+	}
+}
+
+func (i *tmpitimp) Error() error {
+	return i.it.Error()
+}
+
+func (i *tmpitimp) FileInfo() (protocol.FileInfo, error) {
+	var f protocol.FileInfo
+	if err := f.Unmarshal(i.it.Value()); err != nil {
+		return protocol.FileInfo{}, err
+	}
+	return f, nil
+}
+
+func (i *tmpitimp) FileInfoTruncated() (FileInfoTruncated, error) {
+	var f FileInfoTruncated
+	if err := f.Unmarshal(i.it.Value()); err != nil {
+		return FileInfoTruncated{}, err
+	}
+	return f, nil
+}
+
+func (i *tmpitimp) Close() {
+	i.close()
+}
 
 type Counts struct {
 	Files       int
