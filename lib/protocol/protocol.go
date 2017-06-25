@@ -75,6 +75,8 @@ type Model interface {
 	Closed(conn Connection, err error)
 	// The peer device sent progress updates for the files it is currently downloading
 	DownloadProgress(deviceID DeviceID, folder string, updates []FileDownloadProgressUpdate)
+	EncryptedIndex(deviceID DeviceID, folder string, files []EncryptedFileInfo)
+	EncryptedIndexUpdate(deviceID DeviceID, folder string, files []EncryptedFileInfo)
 }
 
 type Connection interface {

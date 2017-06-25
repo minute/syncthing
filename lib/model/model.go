@@ -898,7 +898,11 @@ func (m *Model) ClusterConfig(deviceID protocol.DeviceID, cm protocol.ClusterCon
 			}
 		}
 
-		go sendIndexes(conn, folder.ID, fs, m.folderIgnores[folder.ID], startSequence, dbLocation, dropSymlinks)
+		psk, ok := m.cfg.PSKFor(folder.ID, conn.ID())
+		if ok {
+			l.Infoln("Sending encrypted index data to untrusted device", conn.ID())
+		}
+		go sendIndexes(psk, conn, folder.ID, fs, m.folderIgnores[folder.ID], startSequence, dbLocation, dropSymlinks)
 	}
 
 	m.pmut.Lock()
@@ -1454,7 +1458,7 @@ func (m *Model) receivedFile(folder string, file protocol.FileInfo) {
 	m.folderStatRef(folder).ReceivedFile(file.Name, file.IsDeleted())
 }
 
-func sendIndexes(conn protocol.Connection, folder string, fs *db.FileSet, ignores *ignore.Matcher, startSequence int64, dbLocation string, dropSymlinks bool) {
+func sendIndexes(psk *protocol.PSK, conn protocol.Connection, folder string, fs *db.FileSet, ignores *ignore.Matcher, startSequence int64, dbLocation string, dropSymlinks bool) {
 	deviceID := conn.ID()
 	name := conn.Name()
 	var err error
@@ -1485,7 +1489,7 @@ func sendIndexes(conn protocol.Connection, folder string, fs *db.FileSet, ignore
 			continue
 		}
 
-		minSequence, err = sendIndexTo(minSequence, conn, folder, fs, ignores, dbLocation, dropSymlinks)
+		minSequence, err = sendIndexTo(psk, minSequence, conn, folder, fs, ignores, dbLocation, dropSymlinks)
 
 		// Wait a short amount of time before entering the next loop. If there
 		// are continuous changes happening to the local index, this gives us
@@ -1494,7 +1498,7 @@ func sendIndexes(conn protocol.Connection, folder string, fs *db.FileSet, ignore
 	}
 }
 
-func sendIndexTo(minSequence int64, conn protocol.Connection, folder string, fs *db.FileSet, ignores *ignore.Matcher, dbLocation string, dropSymlinks bool) (int64, error) {
+func sendIndexTo(psk *protocol.PSK, minSequence int64, conn protocol.Connection, folder string, fs *db.FileSet, ignores *ignore.Matcher, dbLocation string, dropSymlinks bool) (int64, error) {
 	deviceID := conn.ID()
 	name := conn.Name()
 	batch := make([]protocol.FileInfo, 0, maxBatchSizeFiles)
@@ -1505,6 +1509,36 @@ func sendIndexTo(minSequence int64, conn protocol.Connection, folder string, fs 
 
 	sorter := NewIndexSorter(dbLocation)
 	defer sorter.Close()
+
+	sendUnencryptedBatch := func(initial bool, batch []protocol.FileInfo) error {
+		if initial {
+			return conn.Index(folder, batch)
+		} else {
+			return conn.IndexUpdate(folder, batch)
+		}
+	}
+
+	sendEncryptedBatch := func(initial bool, batch []protocol.EncryptedFileInfo) error {
+		if initial {
+			return conn.EncryptedIndex(folder, batch)
+		} else {
+			return conn.EncryptedIndexUpdate(folder, batch)
+		}
+	}
+
+	sendBatch := func(initial bool, batch []protocol.FileInfo) error {
+		switch psk {
+		case nil:
+			return sendUnencryptedBatch(initial, batch)
+
+		default:
+			enc := make([]protocol.EncryptedFileInfo, len(batch))
+			for i := range batch {
+				enc[i] = protocol.EncryptFileInfo(psk, batch[i])
+			}
+			return sendEncryptedBatch(initial, enc)
+		}
+	}
 
 	fs.WithHave(protocol.LocalDeviceID, func(fi db.FileIntf) bool {
 		f := fi.(protocol.FileInfo)
@@ -1530,19 +1564,11 @@ func sendIndexTo(minSequence int64, conn protocol.Connection, folder string, fs 
 
 	sorter.Sorted(func(f protocol.FileInfo) bool {
 		if len(batch) == maxBatchSizeFiles || batchSizeBytes > maxBatchSizeBytes {
-			if initial {
-				if err = conn.Index(folder, batch); err != nil {
-					return false
-				}
-				l.Debugf("sendIndexes for %s-%s/%q: %d files (<%d bytes) (initial index)", deviceID, name, folder, len(batch), batchSizeBytes)
-				initial = false
-			} else {
-				if err = conn.IndexUpdate(folder, batch); err != nil {
-					return false
-				}
-				l.Debugf("sendIndexes for %s-%s/%q: %d files (<%d bytes) (batched update)", deviceID, name, folder, len(batch), batchSizeBytes)
+			err = sendBatch(initial, batch)
+			if err != nil {
+				return false // stop iteration
 			}
-
+			initial = false
 			batch = make([]protocol.FileInfo, 0, maxBatchSizeFiles)
 			batchSizeBytes = 0
 		}
@@ -1552,16 +1578,8 @@ func sendIndexTo(minSequence int64, conn protocol.Connection, folder string, fs 
 		return true
 	})
 
-	if initial && err == nil {
-		err = conn.Index(folder, batch)
-		if err == nil {
-			l.Debugf("sendIndexes for %s-%s/%q: %d files (small initial index)", deviceID, name, folder, len(batch))
-		}
-	} else if len(batch) > 0 && err == nil {
-		err = conn.IndexUpdate(folder, batch)
-		if err == nil {
-			l.Debugf("sendIndexes for %s-%s/%q: %d files (last batch)", deviceID, name, folder, len(batch))
-		}
+	if err == nil && (initial || len(batch) > 0) {
+		err = sendBatch(initial, batch)
 	}
 
 	return maxSequence, err
