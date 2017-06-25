@@ -50,11 +50,21 @@ func (psk *PSK) UnmarshalText(bs []byte) error {
 	return nil
 }
 
+func (psk *PSK) raw() *[32]byte {
+	return (*[32]byte)(psk)
+}
+
 func newNonce() *[24]byte {
 	var nonce [24]byte
 	if n, err := rand.Reader.Read(nonce[:]); err != nil || n != len(nonce) {
 		panic("random failure")
 	}
+	return &nonce
+}
+
+func toNonce(bs []byte) *[24]byte {
+	var nonce [24]byte
+	copy(nonce[:], bs)
 	return &nonce
 }
 

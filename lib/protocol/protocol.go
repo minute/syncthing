@@ -60,6 +60,7 @@ var (
 	errDeletedHasBlocks     = errors.New("deleted file with non-empty block list")
 	errDirectoryHasBlocks   = errors.New("directory with non-empty block list")
 	errFileHasNoBlocks      = errors.New("file with empty block list")
+	errCannotDecrypt        = errors.New("response cannot be decrypted")
 )
 
 type Model interface {
@@ -86,6 +87,7 @@ type Connection interface {
 	Index(folder string, files []FileInfo) error
 	IndexUpdate(folder string, files []FileInfo) error
 	Request(folder string, name string, offset int64, size int, hash []byte, fromTemporary bool) ([]byte, error)
+	EncryptedRequest(folder string, identifier string, block int32) ([]byte, []byte, error)
 	ClusterConfig(config ClusterConfig)
 	DownloadProgress(folder string, updates []FileDownloadProgressUpdate)
 	Statistics() Statistics
@@ -116,8 +118,9 @@ type rawConnection struct {
 }
 
 type asyncResult struct {
-	val []byte
-	err error
+	val   []byte
+	nonce []byte // for encrypted responses
+	err   error
 }
 
 type message interface {
@@ -249,6 +252,37 @@ func (c *rawConnection) Request(folder string, name string, offset int64, size i
 		return nil, ErrClosed
 	}
 	return res.val, res.err
+}
+
+func (c *rawConnection) EncryptedRequest(folder, identifier string, block int32) ([]byte, []byte, error) {
+	c.nextIDMut.Lock()
+	id := c.nextID
+	c.nextID++
+	c.nextIDMut.Unlock()
+
+	c.awaitingMut.Lock()
+	if _, ok := c.awaiting[id]; ok {
+		panic("id taken")
+	}
+	rc := make(chan asyncResult, 1)
+	c.awaiting[id] = rc
+	c.awaitingMut.Unlock()
+
+	ok := c.send(&EncryptedRequest{
+		ID:          id,
+		Folder:      folder,
+		Identifier:  identifier,
+		BlockNumber: block,
+	}, nil)
+	if !ok {
+		return nil, nil, ErrClosed
+	}
+
+	res, ok := <-rc
+	if !ok {
+		return nil, nil, ErrClosed
+	}
+	return res.val, res.nonce, res.err
 }
 
 // ClusterConfig send the cluster configuration message to the peer and returns any error
@@ -572,7 +606,10 @@ func (c *rawConnection) handleResponse(resp Response) {
 	c.awaitingMut.Lock()
 	if rc := c.awaiting[resp.ID]; rc != nil {
 		delete(c.awaiting, resp.ID)
-		rc <- asyncResult{resp.Data, codeToError(resp.Code)}
+		rc <- asyncResult{
+			val: resp.Data,
+			err: codeToError(resp.Code),
+		}
 		close(rc)
 	}
 	c.awaitingMut.Unlock()
