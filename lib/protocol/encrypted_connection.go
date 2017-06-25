@@ -34,6 +34,9 @@ func (c *encryptedConnection) Request(folder string, name string, offset int64, 
 		return c.Connection.Request(folder, name, offset, size, hash, fromTemporary)
 	}
 
+	// We have an encryption key, so we rewrite the Request into an
+	// EncryptedRequest instead.
+
 	folder = fileIdentifier(psk, folder)    // XXX: cache these
 	identifier := fileIdentifier(psk, name) // but not these, probably, other than for a short time
 	block := int32(size / BlockSize)
