@@ -26,3 +26,31 @@ func TestPSK(t *testing.T) {
 		t.Error("unmarshal didn't")
 	}
 }
+
+func TestEncryptedFileInfo(t *testing.T) {
+	fi := FileInfo{
+		Name:        "a test file",
+		Type:        FileInfoTypeFile,
+		Size:        1234567,
+		Permissions: 0666,
+		ModifiedS:   123456789,
+		ModifiedNs:  234567890,
+		ModifiedBy:  345678901,
+		Version:     Vector{Counters: []Counter{{1, 2}, {3, 4}}},
+		Sequence:    456789012,
+		Blocks: []BlockInfo{
+			BlockInfo{Size: 1234, Hash: []byte{1, 2, 3, 4}, WeakHash: 5678},
+			BlockInfo{Size: 2345, Hash: []byte{2, 3, 4, 5}, WeakHash: 6789},
+		},
+	}
+	psk := NewPSK()
+	efi := EncryptFileInfo(psk, fi)
+	t.Log(efi)
+	dfi, err := DecryptFileInfo(psk, efi)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.String() != dfi.String() {
+		t.Error("results differ")
+	}
+}
