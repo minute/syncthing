@@ -34,7 +34,11 @@ enum MessageType {
     DOWNLOAD_PROGRESS = 5 [(gogoproto.enumvalue_customname) = "messageTypeDownloadProgress"];
     PING              = 6 [(gogoproto.enumvalue_customname) = "messageTypePing"];
     CLOSE             = 7 [(gogoproto.enumvalue_customname) = "messageTypeClose"];
-}
+    ENC_INDEX         = 8 [(gogoproto.enumvalue_customname) = "messageTypeEncryptedIndex"];
+    ENC_INDEX_UPDATE  = 9 [(gogoproto.enumvalue_customname) = "messageTypeEncryptedIndexUpdate"];
+    ENC_REQUEST       = 10 [(gogoproto.enumvalue_customname) = "messageTypeEncryptedRequest"];
+    ENC_RESPONSE      = 11 [(gogoproto.enumvalue_customname) = "messageTypeEncryptedResponse"];
+    }
 
 enum MessageCompression {
     NONE = 0 [(gogoproto.enumvalue_customname) = "MessageCompressionNone"];
@@ -57,6 +61,7 @@ message Folder {
     bool   ignore_delete        = 5;
     bool   disable_temp_indexes = 6;
     bool   paused               = 7;
+    bool   encrypted            = 8;
 
     repeated Device devices = 16 [(gogoproto.nullable) = false];
 }
@@ -135,6 +140,27 @@ message Counter {
     uint64 value = 2;
 }
 
+// Encrypted
+
+message EncryptedIndex {
+    string                     folder = 1;
+    repeated EncryptedFileInfo files  = 2 [(gogoproto.nullable) = false];
+}
+
+message EncryptedIndexUpdate {
+    string                     folder = 1;
+    repeated EncryptedFileInfo files  = 2 [(gogoproto.nullable) = false];
+}
+
+message EncryptedFileInfo {
+    string identifier         = 1;
+    bytes  encrypted_fileinfo = 2;
+    bytes  nonce              = 3;
+    int32  num_blocks         = 4;
+    Vector version            = 5 [(gogoproto.nullable) = false];
+    int64  sequence           = 6;
+}
+
 // Request
 
 message Request {
@@ -147,12 +173,26 @@ message Request {
     bool   from_temporary = 7;
 }
 
+message EncryptedRequest {
+    int32  id           = 1 [(gogoproto.customname) = "ID"];
+    string folder       = 2;
+    string identifier   = 3;
+    int32  block_number = 4;
+}
+
 // Response
 
 message Response {
     int32     id   = 1 [(gogoproto.customname) = "ID"];
     bytes     data = 2;
     ErrorCode code = 3;
+}
+
+message EncryptedResponse {
+    int32     id    = 1 [(gogoproto.customname) = "ID"];
+    bytes     data  = 2;
+    bytes     nonce = 3;
+    ErrorCode code  = 4;
 }
 
 enum ErrorCode {

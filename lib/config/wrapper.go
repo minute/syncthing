@@ -452,3 +452,19 @@ func (w *Wrapper) MyName() string {
 	cfg, _ := w.Device(myID)
 	return cfg.Name
 }
+
+func (w *Wrapper) PSKFor(folder string, device protocol.DeviceID) (*protocol.PSK, bool) {
+	fld, ok := w.Folder(folder)
+	if !ok {
+		return nil, false
+	}
+	for _, dev := range fld.Devices {
+		if dev.DeviceID == device {
+			if dev.EncryptionKey == nil {
+				return nil, false
+			}
+			return dev.EncryptionKey, true
+		}
+	}
+	return nil, false
+}
