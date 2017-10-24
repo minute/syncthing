@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package ignore
 
@@ -12,10 +12,17 @@ import (
 )
 
 func TestCache(t *testing.T) {
+	fc := new(fakeClock)
+	oldClock := clock
+	clock = fc
+	defer func() {
+		clock = oldClock
+	}()
+
 	c := newCache(nil)
 
 	res, ok := c.get("nonexistent")
-	if res.IsIgnored() || res.IsDeletable() || ok != false {
+	if res.IsIgnored() || res.IsDeletable() || ok {
 		t.Errorf("res %v, ok %v for nonexistent item", res, ok)
 	}
 
@@ -25,12 +32,12 @@ func TestCache(t *testing.T) {
 	c.set("false", 0)
 
 	res, ok = c.get("true")
-	if !res.IsIgnored() || !res.IsDeletable() || ok != true {
+	if !res.IsIgnored() || !res.IsDeletable() || !ok {
 		t.Errorf("res %v, ok %v for true item", res, ok)
 	}
 
 	res, ok = c.get("false")
-	if res.IsIgnored() || res.IsDeletable() || ok != true {
+	if res.IsIgnored() || res.IsDeletable() || !ok {
 		t.Errorf("res %v, ok %v for false item", res, ok)
 	}
 
@@ -41,22 +48,22 @@ func TestCache(t *testing.T) {
 	// Same values should exist
 
 	res, ok = c.get("true")
-	if !res.IsIgnored() || !res.IsDeletable() || ok != true {
+	if !res.IsIgnored() || !res.IsDeletable() || !ok {
 		t.Errorf("res %v, ok %v for true item", res, ok)
 	}
 
 	res, ok = c.get("false")
-	if res.IsIgnored() || res.IsDeletable() || ok != true {
+	if res.IsIgnored() || res.IsDeletable() || !ok {
 		t.Errorf("res %v, ok %v for false item", res, ok)
 	}
 
 	// Sleep and access, to get some data for clean
 
-	time.Sleep(500 * time.Millisecond)
+	*fc += 500 // milliseconds
 
 	c.get("true")
 
-	time.Sleep(100 * time.Millisecond)
+	*fc += 100 // milliseconds
 
 	// "false" was accessed ~600 ms ago, "true" was accessed ~100 ms ago.
 	// This should clean out "false" but not "true"
@@ -74,4 +81,12 @@ func TestCache(t *testing.T) {
 	if ok {
 		t.Errorf("item should have been cleaned")
 	}
+}
+
+type fakeClock int64 // milliseconds
+
+func (f *fakeClock) Now() time.Time {
+	t := time.Unix(int64(*f)/1000, (int64(*f)%1000)*int64(time.Millisecond))
+	*f++
+	return t
 }

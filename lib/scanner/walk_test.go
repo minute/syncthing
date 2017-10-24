@@ -2,12 +2,13 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package scanner
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -20,10 +21,9 @@ import (
 	"testing"
 
 	"github.com/d4l3k/messagediff"
+	"github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/ignore"
-	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
-	"github.com/syncthing/syncthing/lib/symlinks"
 	"golang.org/x/text/unicode/norm"
 )
 
@@ -53,18 +53,18 @@ func init() {
 }
 
 func TestWalkSub(t *testing.T) {
-	ignores := ignore.New(false)
+	ignores := ignore.New(fs.NewFilesystem(fs.FilesystemTypeBasic, "."))
 	err := ignores.Load("testdata/.stignore")
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	fchan, err := Walk(Config{
-		Dir:       "testdata",
-		Subs:      []string{"dir2"},
-		BlockSize: 128 * 1024,
-		Matcher:   ignores,
-		Hashers:   2,
+	fchan, err := Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata"),
+		Subs:       []string{"dir2"},
+		BlockSize:  128 * 1024,
+		Matcher:    ignores,
+		Hashers:    2,
 	})
 	var files []protocol.FileInfo
 	for f := range fchan {
@@ -89,18 +89,18 @@ func TestWalkSub(t *testing.T) {
 }
 
 func TestWalk(t *testing.T) {
-	ignores := ignore.New(false)
+	ignores := ignore.New(fs.NewFilesystem(fs.FilesystemTypeBasic, "."))
 	err := ignores.Load("testdata/.stignore")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Log(ignores)
 
-	fchan, err := Walk(Config{
-		Dir:       "testdata",
-		BlockSize: 128 * 1024,
-		Matcher:   ignores,
-		Hashers:   2,
+	fchan, err := Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata"),
+		BlockSize:  128 * 1024,
+		Matcher:    ignores,
+		Hashers:    2,
 	})
 
 	if err != nil {
@@ -120,19 +120,19 @@ func TestWalk(t *testing.T) {
 }
 
 func TestWalkError(t *testing.T) {
-	_, err := Walk(Config{
-		Dir:       "testdata-missing",
-		BlockSize: 128 * 1024,
-		Hashers:   2,
+	_, err := Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata-missing"),
+		BlockSize:  128 * 1024,
+		Hashers:    2,
 	})
 
 	if err == nil {
 		t.Error("no error from missing directory")
 	}
 
-	_, err = Walk(Config{
-		Dir:       "testdata/bar",
-		BlockSize: 128 * 1024,
+	_, err = Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata/bar"),
+		BlockSize:  128 * 1024,
 	})
 
 	if err == nil {
@@ -148,7 +148,7 @@ func TestVerify(t *testing.T) {
 	progress := newByteCounter()
 	defer progress.Close()
 
-	blocks, err := Blocks(buf, blocksize, -1, progress)
+	blocks, err := Blocks(context.TODO(), buf, blocksize, -1, progress, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,9 +219,11 @@ func TestNormalization(t *testing.T) {
 
 	numValid := len(tests) - numInvalid
 
+	fs := fs.NewFilesystem(fs.FilesystemTypeBasic, ".")
+
 	for _, s1 := range tests {
 		// Create a directory for each of the interesting strings above
-		if err := osutil.MkdirAll(filepath.Join("testdata/normalization", s1), 0755); err != nil {
+		if err := fs.MkdirAll(filepath.Join("testdata/normalization", s1), 0755); err != nil {
 			t.Fatal(err)
 		}
 
@@ -230,10 +232,10 @@ func TestNormalization(t *testing.T) {
 			// file names. Ensure that the file doesn't exist when it's
 			// created. This detects and fails if there's file name
 			// normalization stuff at the filesystem level.
-			if fd, err := os.OpenFile(filepath.Join("testdata/normalization", s1, s2), os.O_CREATE|os.O_EXCL, 0644); err != nil {
+			if fd, err := fs.OpenFile(filepath.Join("testdata/normalization", s1, s2), os.O_CREATE|os.O_EXCL, 0644); err != nil {
 				t.Fatal(err)
 			} else {
-				fd.WriteString("test")
+				fd.Write([]byte("test"))
 				fd.Close()
 			}
 		}
@@ -244,11 +246,11 @@ func TestNormalization(t *testing.T) {
 	// make sure it all gets done. In production, things will be correct
 	// eventually...
 
-	_, err := walkDir("testdata/normalization")
+	_, err := walkDir(fs, "testdata/normalization")
 	if err != nil {
 		t.Fatal(err)
 	}
-	tmp, err := walkDir("testdata/normalization")
+	tmp, err := walkDir(fs, "testdata/normalization")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -276,13 +278,13 @@ func TestNormalization(t *testing.T) {
 func TestIssue1507(t *testing.T) {
 	w := &walker{}
 	c := make(chan protocol.FileInfo, 100)
-	fn := w.walkAndHashFiles(c, c)
+	fn := w.walkAndHashFiles(context.TODO(), c, c)
 
 	fn("", nil, protocol.ErrClosed)
 }
 
-func TestWalkSymlink(t *testing.T) {
-	if !symlinks.Supported {
+func TestWalkSymlinkUnix(t *testing.T) {
+	if runtime.GOOS == "windows" {
 		t.Skip("skipping unsupported symlink test")
 		return
 	}
@@ -293,13 +295,13 @@ func TestWalkSymlink(t *testing.T) {
 	defer os.RemoveAll("_symlinks")
 
 	os.Mkdir("_symlinks", 0755)
-	symlinks.Create("_symlinks/link", "destination", symlinks.TargetUnknown)
+	os.Symlink("destination", "_symlinks/link")
 
 	// Scan it
 
-	fchan, err := Walk(Config{
-		Dir:       "_symlinks",
-		BlockSize: 128 * 1024,
+	fchan, err := Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "_symlinks"),
+		BlockSize:  128 * 1024,
 	})
 
 	if err != nil {
@@ -311,29 +313,62 @@ func TestWalkSymlink(t *testing.T) {
 		files = append(files, f)
 	}
 
-	// Verify that we got one symlink and with the correct block contents
+	// Verify that we got one symlink and with the correct attributes
 
 	if len(files) != 1 {
 		t.Errorf("expected 1 symlink, not %d", len(files))
 	}
-	if len(files[0].Blocks) != 1 {
-		t.Errorf("expected 1 block, not %d", len(files[0].Blocks))
+	if len(files[0].Blocks) != 0 {
+		t.Errorf("expected zero blocks for symlink, not %d", len(files[0].Blocks))
 	}
-
-	if files[0].Blocks[0].Size != int32(len("destination")) {
-		t.Errorf("expected block length %d, not %d", len("destination"), files[0].Blocks[0].Size)
-	}
-
-	// echo -n "destination" | openssl dgst -sha256
-	hash := "b5c755aaab1038b3d5627bbde7f47ca80c5f5c0481c6d33f04139d07aa1530e7"
-	if fmt.Sprintf("%x", files[0].Blocks[0].Hash) != hash {
-		t.Errorf("incorrect hash")
+	if files[0].SymlinkTarget != "destination" {
+		t.Errorf("expected symlink to have target destination, not %q", files[0].SymlinkTarget)
 	}
 }
 
-func walkDir(dir string) ([]protocol.FileInfo, error) {
-	fchan, err := Walk(Config{
-		Dir:           dir,
+func TestWalkSymlinkWindows(t *testing.T) {
+	if runtime.GOOS != "windows" {
+		t.Skip("skipping unsupported symlink test")
+	}
+
+	// Create a folder with a symlink in it
+
+	os.RemoveAll("_symlinks")
+	defer os.RemoveAll("_symlinks")
+
+	os.Mkdir("_symlinks", 0755)
+	if err := os.Symlink("destination", "_symlinks/link"); err != nil {
+		// Probably we require permissions we don't have.
+		t.Skip(err)
+	}
+
+	// Scan it
+
+	fchan, err := Walk(context.TODO(), Config{
+		Filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "_symlinks"),
+		BlockSize:  128 * 1024,
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var files []protocol.FileInfo
+	for f := range fchan {
+		files = append(files, f)
+	}
+
+	// Verify that we got zero symlinks
+
+	if len(files) != 0 {
+		t.Errorf("expected zero symlinks, not %d", len(files))
+	}
+}
+
+func walkDir(fs fs.Filesystem, dir string) ([]protocol.FileInfo, error) {
+	fchan, err := Walk(context.TODO(), Config{
+		Filesystem:    fs,
+		Subs:          []string{dir},
 		BlockSize:     128 * 1024,
 		AutoNormalize: true,
 		Hashers:       2,
@@ -390,34 +425,6 @@ func (l testfileList) String() string {
 	return b.String()
 }
 
-func TestSymlinkTypeEqual(t *testing.T) {
-	testcases := []struct {
-		onDiskType symlinks.TargetType
-		fiType     protocol.FileInfoType
-		equal      bool
-	}{
-		// File is only equal to file
-		{symlinks.TargetFile, protocol.FileInfoTypeSymlinkFile, true},
-		{symlinks.TargetFile, protocol.FileInfoTypeSymlinkDirectory, false},
-		{symlinks.TargetFile, protocol.FileInfoTypeSymlinkUnknown, false},
-		// Directory is only equal to directory
-		{symlinks.TargetDirectory, protocol.FileInfoTypeSymlinkFile, false},
-		{symlinks.TargetDirectory, protocol.FileInfoTypeSymlinkDirectory, true},
-		{symlinks.TargetDirectory, protocol.FileInfoTypeSymlinkUnknown, false},
-		// Unknown is equal to anything
-		{symlinks.TargetUnknown, protocol.FileInfoTypeSymlinkFile, true},
-		{symlinks.TargetUnknown, protocol.FileInfoTypeSymlinkDirectory, true},
-		{symlinks.TargetUnknown, protocol.FileInfoTypeSymlinkUnknown, true},
-	}
-
-	for _, tc := range testcases {
-		res := SymlinkTypeEqual(tc.onDiskType, protocol.FileInfo{Type: tc.fiType})
-		if res != tc.equal {
-			t.Errorf("Incorrect result %v for %v, %v", res, tc.onDiskType, tc.fiType)
-		}
-	}
-}
-
 var initOnce sync.Once
 
 const (
@@ -430,11 +437,12 @@ func BenchmarkHashFile(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		if _, err := HashFile(testdataName, protocol.BlockSize, nil); err != nil {
+		if _, err := HashFile(context.TODO(), fs.NewFilesystem(fs.FilesystemTypeBasic, ""), testdataName, protocol.BlockSize, nil, true); err != nil {
 			b.Fatal(err)
 		}
 	}
 
+	b.SetBytes(testdataSize)
 	b.ReportAllocs()
 }
 
@@ -451,5 +459,72 @@ func initTestFile() {
 
 	if err := fd.Close(); err != nil {
 		panic(err)
+	}
+}
+
+func TestStopWalk(t *testing.T) {
+	// Create tree that is 100 levels deep, with each level containing 100
+	// files (each 1 MB) and 100 directories (in turn containing 100 files
+	// and 100 directories, etc). That is, in total > 100^100 files and as
+	// many directories. It'll take a while to scan, giving us time to
+	// cancel it and make sure the scan stops.
+
+	// Use an errorFs as the backing fs for the rest of the interface
+	// The way we get it is a bit hacky tho.
+	errorFs := fs.NewFilesystem(fs.FilesystemType(-1), ".")
+	fs := fs.NewWalkFilesystem(&infiniteFS{errorFs, 100, 100, 1e6})
+
+	const numHashers = 4
+	ctx, cancel := context.WithCancel(context.Background())
+	fchan, err := Walk(ctx, Config{
+		Filesystem:            fs,
+		BlockSize:             128 * 1024,
+		Hashers:               numHashers,
+		ProgressTickIntervalS: -1, // Don't attempt to build the full list of files before starting to scan...
+	})
+
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Receive a few entries to make sure the walker is up and running,
+	// scanning both files and dirs. Do some quick sanity tests on the
+	// returned file entries to make sure we are not just reading crap from
+	// a closed channel or something.
+	dirs := 0
+	files := 0
+	for {
+		f := <-fchan
+		t.Log("Scanned", f)
+		if f.IsDirectory() {
+			if len(f.Name) == 0 || f.Permissions == 0 {
+				t.Error("Bad directory entry", f)
+			}
+			dirs++
+		} else {
+			if len(f.Name) == 0 || len(f.Blocks) == 0 || f.Permissions == 0 {
+				t.Error("Bad file entry", f)
+			}
+			files++
+		}
+		if dirs > 5 && files > 5 {
+			break
+		}
+	}
+
+	// Cancel the walker.
+	cancel()
+
+	// Empty out any waiting entries and wait for the channel to close.
+	// Count them, they should be zero or very few - essentially, each
+	// hasher has the choice of returning a fully handled entry or
+	// cancelling, but they should not start on another item.
+	extra := 0
+	for range fchan {
+		extra++
+	}
+	t.Log("Extra entries:", extra)
+	if extra > numHashers {
+		t.Error("unexpected extra entries received after cancel")
 	}
 }

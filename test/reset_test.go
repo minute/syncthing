@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // +build integration
 
@@ -33,7 +33,7 @@ func TestReset(t *testing.T) {
 	size := createFiles(t)
 
 	p := startInstance(t, 1)
-	defer p.Stop() // Not checkedStop, because Syncthing will exit on it's own
+	defer p.Stop() // Not checkedStop, because Syncthing will exit on its own
 
 	m, err := p.Model("default")
 	if err != nil {
@@ -76,7 +76,7 @@ func TestReset(t *testing.T) {
 	// ---- Syncthing exits here ----
 
 	p = startInstance(t, 1)
-	defer p.Stop() // Not checkedStop, because Syncthing will exit on it's own
+	defer p.Stop() // Not checkedStop, because Syncthing will exit on its own
 
 	m, err = p.Model("default")
 	if err != nil {

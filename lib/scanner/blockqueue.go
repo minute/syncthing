@@ -2,46 +2,22 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package scanner
 
 import (
+	"context"
 	"errors"
-	"os"
-	"path/filepath"
 
+	"github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
 )
 
-// The parallel hasher reads FileInfo structures from the inbox, hashes the
-// file to populate the Blocks element and sends it to the outbox. A number of
-// workers are used in parallel. The outbox will become closed when the inbox
-// is closed and all items handled.
-
-func newParallelHasher(dir string, blockSize, workers int, outbox, inbox chan protocol.FileInfo, counter Counter, done, cancel chan struct{}) {
-	wg := sync.NewWaitGroup()
-	wg.Add(workers)
-
-	for i := 0; i < workers; i++ {
-		go func() {
-			hashFiles(dir, blockSize, outbox, inbox, counter, cancel)
-			wg.Done()
-		}()
-	}
-
-	go func() {
-		wg.Wait()
-		if done != nil {
-			close(done)
-		}
-		close(outbox)
-	}()
-}
-
-func HashFile(path string, blockSize int, counter Counter) ([]protocol.BlockInfo, error) {
-	fd, err := os.Open(path)
+// HashFile hashes the files and returns a list of blocks representing the file.
+func HashFile(ctx context.Context, fs fs.Filesystem, path string, blockSize int, counter Counter, useWeakHashes bool) ([]protocol.BlockInfo, error) {
+	fd, err := fs.Open(path)
 	if err != nil {
 		l.Debugln("open:", err)
 		return nil, err
@@ -60,7 +36,7 @@ func HashFile(path string, blockSize int, counter Counter) ([]protocol.BlockInfo
 
 	// Hash the file. This may take a while for large files.
 
-	blocks, err := Blocks(fd, blockSize, size, counter)
+	blocks, err := Blocks(ctx, fd, blockSize, size, counter, useWeakHashes)
 	if err != nil {
 		l.Debugln("blocks:", err)
 		return nil, err
@@ -81,10 +57,49 @@ func HashFile(path string, blockSize int, counter Counter) ([]protocol.BlockInfo
 	return blocks, nil
 }
 
-func hashFiles(dir string, blockSize int, outbox, inbox chan protocol.FileInfo, counter Counter, cancel chan struct{}) {
+// The parallel hasher reads FileInfo structures from the inbox, hashes the
+// file to populate the Blocks element and sends it to the outbox. A number of
+// workers are used in parallel. The outbox will become closed when the inbox
+// is closed and all items handled.
+type parallelHasher struct {
+	fs            fs.Filesystem
+	blockSize     int
+	workers       int
+	outbox        chan<- protocol.FileInfo
+	inbox         <-chan protocol.FileInfo
+	counter       Counter
+	done          chan<- struct{}
+	useWeakHashes bool
+	wg            sync.WaitGroup
+}
+
+func newParallelHasher(ctx context.Context, fs fs.Filesystem, blockSize, workers int, outbox chan<- protocol.FileInfo, inbox <-chan protocol.FileInfo, counter Counter, done chan<- struct{}, useWeakHashes bool) {
+	ph := &parallelHasher{
+		fs:            fs,
+		blockSize:     blockSize,
+		workers:       workers,
+		outbox:        outbox,
+		inbox:         inbox,
+		counter:       counter,
+		done:          done,
+		useWeakHashes: useWeakHashes,
+		wg:            sync.NewWaitGroup(),
+	}
+
+	for i := 0; i < workers; i++ {
+		ph.wg.Add(1)
+		go ph.hashFiles(ctx)
+	}
+
+	go ph.closeWhenDone()
+}
+
+func (ph *parallelHasher) hashFiles(ctx context.Context) {
+	defer ph.wg.Done()
+
 	for {
 		select {
-		case f, ok := <-inbox:
+		case f, ok := <-ph.inbox:
 			if !ok {
 				return
 			}
@@ -93,7 +108,7 @@ func hashFiles(dir string, blockSize int, outbox, inbox chan protocol.FileInfo, 
 				panic("Bug. Asked to hash a directory or a deleted file.")
 			}
 
-			blocks, err := HashFile(filepath.Join(dir, f.Name), blockSize, counter)
+			blocks, err := HashFile(ctx, ph.fs, f.Name, ph.blockSize, ph.counter, ph.useWeakHashes)
 			if err != nil {
 				l.Debugln("hash error:", f.Name, err)
 				continue
@@ -111,13 +126,21 @@ func hashFiles(dir string, blockSize int, outbox, inbox chan protocol.FileInfo, 
 			}
 
 			select {
-			case outbox <- f:
-			case <-cancel:
+			case ph.outbox <- f:
+			case <-ctx.Done():
 				return
 			}
 
-		case <-cancel:
+		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (ph *parallelHasher) closeWhenDone() {
+	ph.wg.Wait()
+	if ph.done != nil {
+		close(ph.done)
+	}
+	close(ph.outbox)
 }

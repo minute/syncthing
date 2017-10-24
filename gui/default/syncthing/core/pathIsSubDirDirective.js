@@ -4,7 +4,7 @@ angular.module('syncthing.core')
             require: 'ngModel',
             link: function (scope, elm, attrs, ctrl) {
                 ctrl.$parsers.unshift(function (viewValue) {
-                    // This function checks whether xdir is a subdirectory of ydir,
+                    // This function checks whether ydir is a subdirectory of xdir,
                     // e.g. it would return true if xdir = "/home/a", ydir = "/home/a/b".
                     function isSubDir(xdir, ydir) {
                         var xdirArr = xdir.split(scope.system.pathSeparator);
@@ -20,12 +20,22 @@ angular.module('syncthing.core')
                         }).every(function(e) { return e });
                     }
 
-                    scope.pathIsSubFolder = false;
-                    scope.otherFolder = "";
+                    scope.folderPathErrors.isSub = false;
+                    scope.folderPathErrors.isParent = false;
+                    scope.folderPathErrors.otherID = "";
+                    scope.folderPathErrors.otherLabel = "";
                     for (var folderID in scope.folders) {
                         if (isSubDir(scope.folders[folderID].path, viewValue)) {
-                            scope.otherFolder = folderID;
-                            scope.pathIsSubFolder = true;
+                            scope.folderPathErrors.otherID = folderID;
+                            scope.folderPathErrors.otherLabel = scope.folders[folderID].label;
+                            scope.folderPathErrors.isSub = true;
+                            break;
+                        }
+                        if (viewValue !== "" &&
+                            isSubDir(viewValue, scope.folders[folderID].path)) {
+                            scope.folderPathErrors.otherID = folderID;
+                            scope.folderPathErrors.otherLabel = scope.folders[folderID].label;
+                            scope.folderPathErrors.isParent = true;
                             break;
                         }
                     }

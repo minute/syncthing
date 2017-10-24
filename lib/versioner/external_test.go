@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package versioner
 
@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"testing"
+
+	"github.com/syncthing/syncthing/lib/fs"
 )
 
 func TestExternalNoCommand(t *testing.T) {
@@ -28,8 +30,8 @@ func TestExternalNoCommand(t *testing.T) {
 	// The versioner should fail due to missing command.
 
 	e := External{
-		command:    "nonexistant command",
-		folderPath: "testdata/folder path",
+		filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "."),
+		command:    "nonexistent command",
 	}
 	if err := e.Archive(file); err == nil {
 		t.Error("Command should have failed")
@@ -43,12 +45,12 @@ func TestExternalNoCommand(t *testing.T) {
 }
 
 func TestExternal(t *testing.T) {
-	cmd := "./_external_test/external.sh"
+	cmd := "./_external_test/external.sh %FOLDER_PATH% %FILE_PATH%"
 	if runtime.GOOS == "windows" {
-		cmd = `.\_external_test\external.bat`
+		cmd = `.\\_external_test\\external.bat %FOLDER_PATH% %FILE_PATH%`
 	}
 
-	file := "testdata/folder path/dir (parens)/long filename (parens).txt"
+	file := filepath.Join("testdata", "folder path", "dir (parens)", "/long filename (parens).txt")
 	prepForRemoval(t, file)
 	defer os.RemoveAll("testdata")
 
@@ -61,8 +63,8 @@ func TestExternal(t *testing.T) {
 	// The versioner should run successfully.
 
 	e := External{
+		filesystem: fs.NewFilesystem(fs.FilesystemTypeBasic, "."),
 		command:    cmd,
-		folderPath: "testdata/folder path",
 	}
 	if err := e.Archive(file); err != nil {
 		t.Fatal(err)

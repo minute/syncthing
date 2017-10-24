@@ -20,10 +20,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/juju/ratelimit"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/relay/protocol"
 	"github.com/syncthing/syncthing/lib/tlsutil"
+	"golang.org/x/time/rate"
 
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/nat"
@@ -54,7 +54,6 @@ func init() {
 var (
 	listen string
 	debug  bool
-	proto  string
 
 	sessionAddress []byte
 	sessionPort    uint16
@@ -65,12 +64,13 @@ var (
 
 	limitCheckTimer *time.Timer
 
-	sessionLimitBps int
-	globalLimitBps  int
-	overLimit       int32
-	descriptorLimit int64
-	sessionLimiter  *ratelimit.Bucket
-	globalLimiter   *ratelimit.Bucket
+	sessionLimitBps   int
+	globalLimitBps    int
+	overLimit         int32
+	descriptorLimit   int64
+	sessionLimiter    *rate.Limiter
+	globalLimiter     *rate.Limiter
+	networkBufferSize int
 
 	statusAddr       string
 	poolAddrs        string
@@ -82,6 +82,8 @@ var (
 	natLease   int
 	natRenewal int
 	natTimeout int
+
+	pprofEnabled bool
 )
 
 func main() {
@@ -106,6 +108,8 @@ func main() {
 	flag.IntVar(&natLease, "nat-lease", 60, "NAT lease length in minutes")
 	flag.IntVar(&natRenewal, "nat-renewal", 30, "NAT renewal frequency in minutes")
 	flag.IntVar(&natTimeout, "nat-timeout", 10, "NAT discovery timeout in seconds")
+	flag.BoolVar(&pprofEnabled, "pprof", false, "Enable the built in profiling on the status server")
+	flag.IntVar(&networkBufferSize, "network-buffer", 2048, "Network buffer size (two of these per proxied connection)")
 	flag.Parse()
 
 	if extAddress == "" {
@@ -129,10 +133,10 @@ func main() {
 		laddr.Port = 0
 		transport, ok := http.DefaultTransport.(*http.Transport)
 		if ok {
-			transport.DialContext = (&net.Dialer{
+			transport.Dial = (&net.Dialer{
 				Timeout:   30 * time.Second,
 				LocalAddr: laddr,
-			}).DialContext
+			}).Dial
 		}
 	}
 
@@ -216,10 +220,10 @@ func main() {
 	}
 
 	if sessionLimitBps > 0 {
-		sessionLimiter = ratelimit.NewBucketWithRate(float64(sessionLimitBps), int64(2*sessionLimitBps))
+		sessionLimiter = rate.NewLimiter(rate.Limit(sessionLimitBps), 2*sessionLimitBps)
 	}
 	if globalLimitBps > 0 {
-		globalLimiter = ratelimit.NewBucketWithRate(float64(globalLimitBps), int64(2*globalLimitBps))
+		globalLimiter = rate.NewLimiter(rate.Limit(globalLimitBps), 2*globalLimitBps)
 	}
 
 	if statusAddr != "" {

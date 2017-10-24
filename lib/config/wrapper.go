@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package config
 
@@ -13,6 +13,7 @@ import (
 	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/rand"
 	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/syncthing/syncthing/lib/util"
 )
@@ -127,15 +128,26 @@ func (w *Wrapper) RawCopy() Configuration {
 	return w.cfg.Copy()
 }
 
+// ReplaceBlocking swaps the current configuration object for the given one,
+// and waits for subscribers to be notified.
+func (w *Wrapper) ReplaceBlocking(cfg Configuration) error {
+	w.mut.Lock()
+	wg := sync.NewWaitGroup()
+	err := w.replaceLocked(cfg, wg)
+	w.mut.Unlock()
+	wg.Wait()
+	return err
+}
+
 // Replace swaps the current configuration object for the given one.
 func (w *Wrapper) Replace(cfg Configuration) error {
 	w.mut.Lock()
 	defer w.mut.Unlock()
 
-	return w.replaceLocked(cfg)
+	return w.replaceLocked(cfg, nil)
 }
 
-func (w *Wrapper) replaceLocked(to Configuration) error {
+func (w *Wrapper) replaceLocked(to Configuration, wg sync.WaitGroup) error {
 	from := w.cfg
 
 	if err := to.clean(); err != nil {
@@ -154,14 +166,22 @@ func (w *Wrapper) replaceLocked(to Configuration) error {
 	w.deviceMap = nil
 	w.folderMap = nil
 
-	w.notifyListeners(from, to)
+	w.notifyListeners(from, to, wg)
 
 	return nil
 }
 
-func (w *Wrapper) notifyListeners(from, to Configuration) {
+func (w *Wrapper) notifyListeners(from, to Configuration, wg sync.WaitGroup) {
+	if wg != nil {
+		wg.Add(len(w.subs))
+	}
 	for _, sub := range w.subs {
-		go w.notifyListener(sub, from.Copy(), to.Copy())
+		go func(commiter Committer) {
+			w.notifyListener(commiter, from.Copy(), to.Copy())
+			if wg != nil {
+				wg.Done()
+			}
+		}(sub)
 	}
 }
 
@@ -187,26 +207,35 @@ func (w *Wrapper) Devices() map[protocol.DeviceID]DeviceConfiguration {
 	return w.deviceMap
 }
 
-// SetDevice adds a new device to the configuration, or overwrites an existing
-// device with the same ID.
-func (w *Wrapper) SetDevice(dev DeviceConfiguration) error {
+// SetDevices adds new devices to the configuration, or overwrites existing
+// devices with the same ID.
+func (w *Wrapper) SetDevices(devs []DeviceConfiguration) error {
 	w.mut.Lock()
 	defer w.mut.Unlock()
 
 	newCfg := w.cfg.Copy()
-	replaced := false
-	for i := range newCfg.Devices {
-		if newCfg.Devices[i].DeviceID == dev.DeviceID {
-			newCfg.Devices[i] = dev
-			replaced = true
-			break
+	var replaced bool
+	for oldIndex := range devs {
+		replaced = false
+		for newIndex := range newCfg.Devices {
+			if newCfg.Devices[newIndex].DeviceID == devs[oldIndex].DeviceID {
+				newCfg.Devices[newIndex] = devs[oldIndex]
+				replaced = true
+				break
+			}
+		}
+		if !replaced {
+			newCfg.Devices = append(newCfg.Devices, devs[oldIndex])
 		}
 	}
-	if !replaced {
-		newCfg.Devices = append(w.cfg.Devices, dev)
-	}
 
-	return w.replaceLocked(newCfg)
+	return w.replaceLocked(newCfg, nil)
+}
+
+// SetDevice adds a new device to the configuration, or overwrites an existing
+// device with the same ID.
+func (w *Wrapper) SetDevice(dev DeviceConfiguration) error {
+	return w.SetDevices([]DeviceConfiguration{dev})
 }
 
 // RemoveDevice removes the device from the configuration
@@ -227,7 +256,7 @@ func (w *Wrapper) RemoveDevice(id protocol.DeviceID) error {
 		return nil
 	}
 
-	return w.replaceLocked(newCfg)
+	return w.replaceLocked(newCfg, nil)
 }
 
 // Folders returns a map of folders. Folder structures should not be changed,
@@ -263,7 +292,7 @@ func (w *Wrapper) SetFolder(fld FolderConfiguration) error {
 		newCfg.Folders = append(w.cfg.Folders, fld)
 	}
 
-	return w.replaceLocked(newCfg)
+	return w.replaceLocked(newCfg, nil)
 }
 
 // Options returns the current options configuration object.
@@ -279,7 +308,7 @@ func (w *Wrapper) SetOptions(opts OptionsConfiguration) error {
 	defer w.mut.Unlock()
 	newCfg := w.cfg.Copy()
 	newCfg.Options = opts
-	return w.replaceLocked(newCfg)
+	return w.replaceLocked(newCfg, nil)
 }
 
 // GUI returns the current GUI configuration object.
@@ -295,7 +324,7 @@ func (w *Wrapper) SetGUI(gui GUIConfiguration) error {
 	defer w.mut.Unlock()
 	newCfg := w.cfg.Copy()
 	newCfg.GUI = gui
-	return w.replaceLocked(newCfg)
+	return w.replaceLocked(newCfg, nil)
 }
 
 // IgnoredDevice returns whether or not connection attempts from the given
@@ -305,6 +334,19 @@ func (w *Wrapper) IgnoredDevice(id protocol.DeviceID) bool {
 	defer w.mut.Unlock()
 	for _, device := range w.cfg.IgnoredDevices {
 		if device == id {
+			return true
+		}
+	}
+	return false
+}
+
+// IgnoredFolder returns whether or not share attempts for the given
+// folder should be silently ignored.
+func (w *Wrapper) IgnoredFolder(folder string) bool {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+	for _, nfolder := range w.cfg.IgnoredFolders {
+		if folder == nfolder {
 			return true
 		}
 	}
@@ -323,9 +365,21 @@ func (w *Wrapper) Device(id protocol.DeviceID) (DeviceConfiguration, bool) {
 	return DeviceConfiguration{}, false
 }
 
+// Folder returns the configuration for the given folder and an "ok" bool.
+func (w *Wrapper) Folder(id string) (FolderConfiguration, bool) {
+	w.mut.Lock()
+	defer w.mut.Unlock()
+	for _, folder := range w.cfg.Folders {
+		if folder.ID == id {
+			return folder, true
+		}
+	}
+	return FolderConfiguration{}, false
+}
+
 // Save writes the configuration to disk, and generates a ConfigSaved event.
 func (w *Wrapper) Save() error {
-	fd, err := osutil.CreateAtomic(w.path, 0600)
+	fd, err := osutil.CreateAtomic(w.path)
 	if err != nil {
 		l.Debugln("CreateAtomic:", err)
 		return err
@@ -382,4 +436,35 @@ func (w *Wrapper) RequiresRestart() bool {
 
 func (w *Wrapper) setRequiresRestart() {
 	atomic.StoreUint32(&w.requiresRestart, 1)
+}
+
+func (w *Wrapper) StunServers() []string {
+	var addresses []string
+	for _, addr := range w.cfg.Options.StunServers {
+		switch addr {
+		case "default":
+			addresses = append(addresses, DefaultStunServers...)
+		default:
+			addresses = append(addresses, addr)
+		}
+	}
+
+	addresses = util.UniqueStrings(addresses)
+
+	// Shuffle
+	l := len(addresses)
+	for i := range addresses {
+		r := rand.Intn(l)
+		addresses[i], addresses[r] = addresses[r], addresses[i]
+	}
+
+	return addresses
+}
+
+func (w *Wrapper) MyName() string {
+	w.mut.Lock()
+	myID := w.cfg.MyID
+	w.mut.Unlock()
+	cfg, _ := w.Device(myID)
+	return cfg.Name
 }

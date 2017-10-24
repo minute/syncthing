@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package db
 
@@ -51,14 +51,14 @@ func TestNamespacedTime(t *testing.T) {
 
 	n1 := NewNamespacedKV(ldb, "foo")
 
-	if v, ok := n1.Time("test"); v != (time.Time{}) || ok {
+	if v, ok := n1.Time("test"); !v.IsZero() || ok {
 		t.Errorf("Incorrect return v %v != %v || ok %v != false", v, time.Time{}, ok)
 	}
 
 	now := time.Now()
 	n1.PutTime("test", now)
 
-	if v, ok := n1.Time("test"); v != now || !ok {
+	if v, ok := n1.Time("test"); !v.Equal(now) || !ok {
 		t.Errorf("Incorrect return v %v != %v || ok %v != true", v, now, ok)
 	}
 }

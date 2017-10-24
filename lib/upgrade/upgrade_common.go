@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Package upgrade downloads and compares releases, and upgrades the running binary.
 package upgrade
@@ -104,20 +104,26 @@ func CompareVersions(a, b string) Relation {
 	for i := 0; i < minlen; i++ {
 		if arel[i] < brel[i] {
 			if i == 0 {
+				// major version difference
+				if arel[0] == 0 && brel[0] == 1 {
+					// special case, v0.x is equivalent in majorness to v1.x.
+					return Older
+				}
 				return MajorOlder
 			}
-			if i == 1 && arel[0] == 0 {
-				return MajorOlder
-			}
+			// minor or patch version difference
 			return Older
 		}
 		if arel[i] > brel[i] {
 			if i == 0 {
+				// major version difference
+				if arel[0] == 1 && brel[0] == 0 {
+					// special case, v0.x is equivalent in majorness to v1.x.
+					return Newer
+				}
 				return MajorNewer
 			}
-			if i == 1 && arel[0] == 0 {
-				return MajorNewer
-			}
+			// minor or patch version difference
 			return Newer
 		}
 	}

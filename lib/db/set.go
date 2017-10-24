@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Package db provides a set type to track local/remote files with newness
 // checks. We must do a certain amount of normalization in here. We will get
@@ -25,6 +25,7 @@ import (
 type FileSet struct {
 	sequence   int64 // Our local sequence number
 	folder     string
+	fs         fs.Filesystem
 	db         *Instance
 	blockmap   *BlockMap
 	localSize  sizeTracker
@@ -73,7 +74,7 @@ func (s *sizeTracker) addFile(f FileIntf) {
 	switch {
 	case f.IsDeleted():
 		s.Deleted++
-	case f.IsDirectory():
+	case f.IsDirectory() && !f.IsSymlink():
 		s.Directories++
 	case f.IsSymlink():
 		s.Symlinks++
@@ -93,7 +94,7 @@ func (s *sizeTracker) removeFile(f FileIntf) {
 	switch {
 	case f.IsDeleted():
 		s.Deleted--
-	case f.IsDirectory():
+	case f.IsDirectory() && !f.IsSymlink():
 		s.Directories--
 	case f.IsSymlink():
 		s.Symlinks--
@@ -113,10 +114,11 @@ func (s *sizeTracker) Size() Counts {
 	return s.Counts
 }
 
-func NewFileSet(folder string, db *Instance) *FileSet {
+func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
 	var s = FileSet{
 		remoteSequence: make(map[protocol.DeviceID]int64),
 		folder:         folder,
+		fs:             fs,
 		db:             db,
 		blockmap:       NewBlockMap(db, db.folderIdx.ID([]byte(folder))),
 		updateMutex:    sync.NewMutex(),
@@ -303,7 +305,7 @@ func (s *FileSet) SetIndexID(device protocol.DeviceID, id protocol.IndexID) {
 func (s *FileSet) MtimeFS() *fs.MtimeFS {
 	prefix := s.db.mtimesKey([]byte(s.folder))
 	kv := NewNamespacedKV(s.db, string(prefix))
-	return fs.NewMtimeFS(kv)
+	return fs.NewMtimeFS(s.fs, kv)
 }
 
 func (s *FileSet) ListDevices() []protocol.DeviceID {

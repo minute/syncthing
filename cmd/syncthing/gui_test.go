@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package main
 
@@ -23,6 +23,7 @@ import (
 
 	"github.com/d4l3k/messagediff"
 	"github.com/syncthing/syncthing/lib/config"
+	"github.com/syncthing/syncthing/lib/events"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/thejerf/suture"
@@ -70,7 +71,7 @@ func TestStopAfterBrokenConfig(t *testing.T) {
 	}
 	w := config.Wrap("/dev/null", cfg)
 
-	srv := newAPIService(protocol.LocalDeviceID, w, "../../test/h1/https-cert.pem", "../../test/h1/https-key.pem", "", nil, nil, nil, nil, nil, nil, nil)
+	srv := newAPIService(protocol.LocalDeviceID, w, "../../test/h1/https-cert.pem", "../../test/h1/https-key.pem", "", nil, nil, nil, nil, nil, nil, nil, nil)
 	srv.started = make(chan string)
 
 	sup := suture.NewSimple("test")
@@ -474,11 +475,12 @@ func startHTTP(cfg *mockedConfig) (string, error) {
 	connections := new(mockedConnections)
 	errorLog := new(mockedLoggerRecorder)
 	systemLog := new(mockedLoggerRecorder)
+	cpu := new(mockedCPUService)
 	addrChan := make(chan string)
 
 	// Instantiate the API service
 	svc := newAPIService(protocol.LocalDeviceID, cfg, httpsCertFile, httpsKeyFile, assetDir, model,
-		eventSub, diskEventSub, discoverer, connections, errorLog, systemLog)
+		eventSub, diskEventSub, discoverer, connections, errorLog, systemLog, cpu)
 	svc.started = addrChan
 
 	// Actually start the API service
@@ -507,6 +509,9 @@ func TestCSRFRequired(t *testing.T) {
 	cfg := new(mockedConfig)
 	cfg.gui.APIKey = testAPIKey
 	baseURL, err := startHTTP(cfg)
+	if err != nil {
+		t.Fatal("Unexpected error from getting base URL:", err)
+	}
 
 	cli := &http.Client{
 		Timeout: time.Second,
@@ -919,5 +924,36 @@ func TestOptionsRequest(t *testing.T) {
 	}
 	if resp.Header.Get("Access-Control-Allow-Headers") != "Content-Type, X-API-Key" {
 		t.Fatal("OPTIONS on /rest/system/status should return a 'Access-Control-Allow-Headers: Content-Type, X-API-KEY' header")
+	}
+}
+
+func TestEventMasks(t *testing.T) {
+	cfg := new(mockedConfig)
+	defSub := new(mockedEventSub)
+	diskSub := new(mockedEventSub)
+	svc := newAPIService(protocol.LocalDeviceID, cfg, "", "", "", nil, defSub, diskSub, nil, nil, nil, nil, nil)
+
+	if mask := svc.getEventMask(""); mask != defaultEventMask {
+		t.Errorf("incorrect default mask %x != %x", int64(mask), int64(defaultEventMask))
+	}
+
+	expected := events.FolderSummary | events.LocalChangeDetected
+	if mask := svc.getEventMask("FolderSummary,LocalChangeDetected"); mask != expected {
+		t.Errorf("incorrect parsed mask %x != %x", int64(mask), int64(expected))
+	}
+
+	expected = 0
+	if mask := svc.getEventMask("WeirdEvent,something else that doesn't exist"); mask != expected {
+		t.Errorf("incorrect parsed mask %x != %x", int64(mask), int64(expected))
+	}
+
+	if res := svc.getEventSub(defaultEventMask); res != defSub {
+		t.Errorf("should have returned the given default event sub")
+	}
+	if res := svc.getEventSub(diskEventMask); res != diskSub {
+		t.Errorf("should have returned the given disk event sub")
+	}
+	if res := svc.getEventSub(events.LocalIndexUpdated); res == nil || res == defSub || res == diskSub {
+		t.Errorf("should have returned a valid, non-default event sub")
 	}
 }

@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package model
 
@@ -15,25 +15,18 @@ import (
 )
 
 func init() {
-	folderFactories[config.FolderTypeReadOnly] = newROFolder
+	folderFactories[config.FolderTypeSendOnly] = newSendOnlyFolder
 }
 
-type roFolder struct {
+type sendOnlyFolder struct {
 	folder
 }
 
-func newROFolder(model *Model, cfg config.FolderConfiguration, _ versioner.Versioner, _ *fs.MtimeFS) service {
-	return &roFolder{
-		folder: folder{
-			stateTracker: newStateTracker(cfg.ID),
-			scan:         newFolderScanner(cfg),
-			stop:         make(chan struct{}),
-			model:        model,
-		},
-	}
+func newSendOnlyFolder(model *Model, cfg config.FolderConfiguration, _ versioner.Versioner, _ fs.Filesystem) service {
+	return &sendOnlyFolder{folder: newFolder(model, cfg)}
 }
 
-func (f *roFolder) Serve() {
+func (f *sendOnlyFolder) Serve() {
 	l.Debugln(f, "starting")
 	defer l.Debugln(f, "exiting")
 
@@ -41,51 +34,37 @@ func (f *roFolder) Serve() {
 		f.scan.timer.Stop()
 	}()
 
-	initialScanCompleted := false
+	if f.FSWatcherEnabled {
+		f.startWatcher()
+	}
+
 	for {
 		select {
-		case <-f.stop:
+		case <-f.ctx.Done():
 			return
 
+		case <-f.ignoresUpdated:
+			if f.FSWatcherEnabled {
+				f.restartWatcher()
+			}
+
 		case <-f.scan.timer.C:
-			if err := f.model.CheckFolderHealth(f.folderID); err != nil {
-				l.Infoln("Skipping folder", f.folderID, "scan due to folder error:", err)
-				f.scan.Reschedule()
-				continue
-			}
-
-			l.Debugln(f, "rescan")
-
-			if err := f.model.internalScanFolderSubdirs(f.folderID, nil); err != nil {
-				// Potentially sets the error twice, once in the scanner just
-				// by doing a check, and once here, if the error returned is
-				// the same one as returned by CheckFolderHealth, though
-				// duplicate set is handled by setError.
-				f.setError(err)
-				f.scan.Reschedule()
-				continue
-			}
-
-			if !initialScanCompleted {
-				l.Infoln("Completed initial scan (ro) of folder", f.folderID)
-				initialScanCompleted = true
-			}
-
-			if f.scan.HasNoInterval() {
-				continue
-			}
-
-			f.scan.Reschedule()
+			l.Debugln(f, "Scanning subdirectories")
+			f.scanTimerFired()
 
 		case req := <-f.scan.now:
-			req.err <- f.scanSubdirsIfHealthy(req.subdirs)
+			req.err <- f.scanSubdirs(req.subdirs)
 
 		case next := <-f.scan.delay:
 			f.scan.timer.Reset(next)
+
+		case fsEvents := <-f.watchChan:
+			l.Debugln(f, "filesystem notification rescan")
+			f.scanSubdirs(fsEvents)
 		}
 	}
 }
 
-func (f *roFolder) String() string {
-	return fmt.Sprintf("roFolder/%s@%p", f.folderID, f)
+func (f *sendOnlyFolder) String() string {
+	return fmt.Sprintf("sendOnlyFolder/%s@%p", f.folderID, f)
 }

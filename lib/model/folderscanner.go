@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package model
 
@@ -56,8 +56,4 @@ func (f *folderScanner) Scan(subdirs []string) error {
 
 func (f *folderScanner) Delay(next time.Duration) {
 	f.delay <- next
-}
-
-func (f *folderScanner) HasNoInterval() bool {
-	return f.interval == 0
 }

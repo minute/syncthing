@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // Package config implements reading and writing of the syncthing configuration file.
 package config
@@ -13,31 +13,42 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"net/url"
 	"os"
 	"path"
+	"path/filepath"
+	"runtime"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/rand"
+	"github.com/syncthing/syncthing/lib/upgrade"
 	"github.com/syncthing/syncthing/lib/util"
 )
 
 const (
 	OldestHandledVersion = 10
-	CurrentVersion       = 17
+	CurrentVersion       = 25
 	MaxRescanIntervalS   = 365 * 24 * 60 * 60
 )
 
 var (
+	// DefaultTCPPort defines default TCP port used if the URI does not specify one, for example tcp://0.0.0.0
+	DefaultTCPPort = 22000
+	// DefaultKCPPort defines default KCP (UDP) port used if the URI does not specify one, for example kcp://0.0.0.0
+	DefaultKCPPort = 22020
 	// DefaultListenAddresses should be substituted when the configuration
 	// contains <listenAddress>default</listenAddress>. This is done by the
 	// "consumer" of the configuration as we don't want these saved to the
 	// config.
 	DefaultListenAddresses = []string{
-		"tcp://0.0.0.0:22000",
+		util.Address("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(DefaultTCPPort))),
 		"dynamic+https://relays.syncthing.net/endpoint",
+		util.Address("kcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(DefaultKCPPort))),
 	}
 	// DefaultDiscoveryServersV4 should be substituted when the configuration
 	// contains <globalAnnounceServer>default-v4</globalAnnounceServer>.
@@ -56,7 +67,25 @@ var (
 	// DefaultDiscoveryServers should be substituted when the configuration
 	// contains <globalAnnounceServer>default</globalAnnounceServer>.
 	DefaultDiscoveryServers = append(DefaultDiscoveryServersV4, DefaultDiscoveryServersV6...)
-
+	// DefaultStunServers should be substituted when the configuration
+	// contains <stunServer>default</stunServer>.
+	DefaultStunServers = []string{
+		"stun.callwithus.com:3478",
+		"stun.counterpath.com:3478",
+		"stun.counterpath.net:3478",
+		"stun.ekiga.net:3478",
+		"stun.ideasip.com:3478",
+		"stun.internetcalls.com:3478",
+		"stun.schlund.de:3478",
+		"stun.sipgate.net:10000",
+		"stun.sipgate.net:3478",
+		"stun.voip.aebc.com:3478",
+		"stun.voiparound.com:3478",
+		"stun.voipbuster.com:3478",
+		"stun.voipstunt.com:3478",
+		"stun.voxgratia.org:3478",
+		"stun.xten.com:3478",
+	}
 	// DefaultTheme is the default and fallback theme for the web UI.
 	DefaultTheme = "default"
 )
@@ -126,9 +155,11 @@ type Configuration struct {
 	GUI            GUIConfiguration      `xml:"gui" json:"gui"`
 	Options        OptionsConfiguration  `xml:"options" json:"options"`
 	IgnoredDevices []protocol.DeviceID   `xml:"ignoredDevice" json:"ignoredDevices"`
+	IgnoredFolders []string              `xml:"ignoredFolder" json:"ignoredFolders"`
 	XMLName        xml.Name              `xml:"configuration" json:"-"`
 
-	OriginalVersion int `xml:"-" json:"-"` // The version we read from disk, before any conversion
+	MyID            protocol.DeviceID `xml:"-" json:"-"` // Provided by the instantiator.
+	OriginalVersion int               `xml:"-" json:"-"` // The version we read from disk, before any conversion
 }
 
 func (cfg Configuration) Copy() Configuration {
@@ -152,6 +183,10 @@ func (cfg Configuration) Copy() Configuration {
 	newCfg.IgnoredDevices = make([]protocol.DeviceID, len(cfg.IgnoredDevices))
 	copy(newCfg.IgnoredDevices, cfg.IgnoredDevices)
 
+	// FolderConfiguraion.ID is type string
+	newCfg.IgnoredFolders = make([]string, len(cfg.IgnoredFolders))
+	copy(newCfg.IgnoredFolders, cfg.IgnoredFolders)
+
 	return newCfg
 }
 
@@ -168,6 +203,8 @@ func (cfg *Configuration) WriteXML(w io.Writer) error {
 
 func (cfg *Configuration) prepare(myID protocol.DeviceID) error {
 	var myName string
+
+	cfg.MyID = myID
 
 	// Ensure this device is present in the config
 	for _, device := range cfg.Devices {
@@ -206,6 +243,9 @@ func (cfg *Configuration) clean() error {
 	if cfg.IgnoredDevices == nil {
 		cfg.IgnoredDevices = []protocol.DeviceID{}
 	}
+	if cfg.IgnoredFolders == nil {
+		cfg.IgnoredFolders = []string{}
+	}
 	if cfg.Options.AlwaysLocalNets == nil {
 		cfg.Options.AlwaysLocalNets = []string{}
 	}
@@ -226,6 +266,14 @@ func (cfg *Configuration) clean() error {
 			return fmt.Errorf("duplicate folder ID %q in configuration", folder.ID)
 		}
 		seenFolders[folder.ID] = struct{}{}
+	}
+
+	// Remove ignored folders that are anyway part of the configuration.
+	for i := 0; i < len(cfg.IgnoredFolders); i++ {
+		if _, ok := seenFolders[cfg.IgnoredFolders[i]]; ok {
+			cfg.IgnoredFolders = append(cfg.IgnoredFolders[:i], cfg.IgnoredFolders[i+1:]...)
+			i-- // IgnoredFolders[i] now points to something else, so needs to be rechecked
+		}
 	}
 
 	cfg.Options.ListenAddresses = util.UniqueStrings(cfg.Options.ListenAddresses)
@@ -257,6 +305,30 @@ func (cfg *Configuration) clean() error {
 	if cfg.Version == 16 {
 		convertV16V17(cfg)
 	}
+	if cfg.Version == 17 {
+		convertV17V18(cfg)
+	}
+	if cfg.Version == 18 {
+		convertV18V19(cfg)
+	}
+	if cfg.Version == 19 {
+		convertV19V20(cfg)
+	}
+	if cfg.Version == 20 {
+		convertV20V21(cfg)
+	}
+	if cfg.Version == 21 {
+		convertV21V22(cfg)
+	}
+	if cfg.Version == 22 {
+		convertV22V23(cfg)
+	}
+	if cfg.Version == 23 {
+		convertV23V24(cfg)
+	}
+	if cfg.Version == 24 {
+		convertV24V25(cfg)
+	}
 
 	// Build a list of available devices
 	existingDevices := make(map[protocol.DeviceID]bool)
@@ -280,12 +352,8 @@ func (cfg *Configuration) clean() error {
 		sort.Sort(FolderDeviceConfigurationList(cfg.Folders[i].Devices))
 	}
 
-	// An empty address list is equivalent to a single "dynamic" entry
 	for i := range cfg.Devices {
-		n := &cfg.Devices[i]
-		if len(n.Addresses) == 0 || len(n.Addresses) == 1 && n.Addresses[0] == "" {
-			n.Addresses = []string{"dynamic"}
-		}
+		cfg.Devices[i].prepare()
 	}
 
 	// Very short reconnection intervals are annoying
@@ -310,6 +378,133 @@ func (cfg *Configuration) clean() error {
 	return nil
 }
 
+func convertV24V25(cfg *Configuration) {
+	for i := range cfg.Folders {
+		cfg.Folders[i].FSWatcherDelayS = 10
+	}
+
+	cfg.Version = 25
+}
+
+func convertV23V24(cfg *Configuration) {
+	cfg.Options.URSeen = 2
+
+	cfg.Version = 24
+}
+
+func convertV22V23(cfg *Configuration) {
+	permBits := fs.FileMode(0777)
+	if runtime.GOOS == "windows" {
+		// Windows has no umask so we must chose a safer set of bits to
+		// begin with.
+		permBits = 0700
+	}
+	for i := range cfg.Folders {
+		fs := cfg.Folders[i].Filesystem()
+		// Invalid config posted, or tests.
+		if fs == nil {
+			continue
+		}
+		if stat, err := fs.Stat(".stfolder"); err == nil && !stat.IsDir() {
+			err = fs.Remove(".stfolder")
+			if err == nil {
+				err = fs.Mkdir(".stfolder", permBits)
+				fs.Hide(".stfolder") // ignore error
+			}
+			if err != nil {
+				l.Infoln("Failed to upgrade folder marker:", err)
+			}
+		}
+	}
+
+	cfg.Version = 23
+}
+
+func convertV21V22(cfg *Configuration) {
+	for i := range cfg.Folders {
+		cfg.Folders[i].FilesystemType = fs.FilesystemTypeBasic
+		// Migrate to templated external versioner commands
+		if cfg.Folders[i].Versioning.Type == "external" {
+			cfg.Folders[i].Versioning.Params["command"] += " %FOLDER_PATH% %FILE_PATH%"
+		}
+	}
+
+	cfg.Version = 22
+}
+
+func convertV20V21(cfg *Configuration) {
+	for _, folder := range cfg.Folders {
+		if folder.FilesystemType != fs.FilesystemTypeBasic {
+			continue
+		}
+		switch folder.Versioning.Type {
+		case "simple", "trashcan":
+			// Clean out symlinks in the known place
+			cleanSymlinks(folder.Filesystem(), ".stversions")
+		case "staggered":
+			versionDir := folder.Versioning.Params["versionsPath"]
+			if versionDir == "" {
+				// default place
+				cleanSymlinks(folder.Filesystem(), ".stversions")
+			} else if filepath.IsAbs(versionDir) {
+				// absolute
+				cleanSymlinks(fs.NewFilesystem(fs.FilesystemTypeBasic, versionDir), ".")
+			} else {
+				// relative to folder
+				cleanSymlinks(folder.Filesystem(), versionDir)
+			}
+		}
+	}
+
+	cfg.Version = 21
+}
+
+func convertV19V20(cfg *Configuration) {
+	cfg.Options.MinHomeDiskFree = Size{Value: cfg.Options.DeprecatedMinHomeDiskFreePct, Unit: "%"}
+	cfg.Options.DeprecatedMinHomeDiskFreePct = 0
+
+	for i := range cfg.Folders {
+		cfg.Folders[i].MinDiskFree = Size{Value: cfg.Folders[i].DeprecatedMinDiskFreePct, Unit: "%"}
+		cfg.Folders[i].DeprecatedMinDiskFreePct = 0
+	}
+
+	cfg.Version = 20
+}
+
+func convertV18V19(cfg *Configuration) {
+	// Triggers a database tweak
+	cfg.Version = 19
+}
+
+func convertV17V18(cfg *Configuration) {
+	// Do channel selection for existing users. Those who have auto upgrades
+	// and usage reporting on default to the candidate channel. Others get
+	// stable.
+	if cfg.Options.URAccepted > 0 && cfg.Options.AutoUpgradeIntervalH > 0 {
+		cfg.Options.UpgradeToPreReleases = true
+	}
+
+	// Show a notification to explain what's going on, except if upgrades
+	// are disabled by compilation or environment variable in which case
+	// it's not relevant.
+	if !upgrade.DisabledByCompilation && os.Getenv("STNOUPGRADE") == "" {
+		cfg.Options.UnackedNotificationIDs = append(cfg.Options.UnackedNotificationIDs, "channelNotification")
+	}
+
+	cfg.Version = 18
+}
+
+func convertV16V17(cfg *Configuration) {
+	// Fsync = true removed
+
+	cfg.Version = 17
+}
+
+func convertV15V16(cfg *Configuration) {
+	// Triggers a database tweak
+	cfg.Version = 16
+}
+
 func convertV14V15(cfg *Configuration) {
 	// Undo v0.13.0 broken migration
 
@@ -323,19 +518,6 @@ func convertV14V15(cfg *Configuration) {
 	}
 
 	cfg.Version = 15
-}
-
-func convertV15V16(cfg *Configuration) {
-	// Triggers a database tweak
-	cfg.Version = 16
-}
-
-func convertV16V17(cfg *Configuration) {
-	for i := range cfg.Folders {
-		cfg.Folders[i].Fsync = true
-	}
-
-	cfg.Version = 17
 }
 
 func convertV13V14(cfg *Configuration) {
@@ -407,9 +589,9 @@ func convertV13V14(cfg *Configuration) {
 
 	for i, fcfg := range cfg.Folders {
 		if fcfg.DeprecatedReadOnly {
-			cfg.Folders[i].Type = FolderTypeReadOnly
+			cfg.Folders[i].Type = FolderTypeSendOnly
 		} else {
-			cfg.Folders[i].Type = FolderTypeReadWrite
+			cfg.Folders[i].Type = FolderTypeSendReceive
 		}
 		cfg.Folders[i].DeprecatedReadOnly = false
 	}
@@ -483,7 +665,7 @@ func convertV11V12(cfg *Configuration) {
 func convertV10V11(cfg *Configuration) {
 	// Set minimum disk free of existing folders to 1%
 	for i := range cfg.Folders {
-		cfg.Folders[i].MinDiskFreePct = 1
+		cfg.Folders[i].DeprecatedMinDiskFreePct = 1
 	}
 	cfg.Version = 11
 }
@@ -551,4 +733,24 @@ loop:
 		i++
 	}
 	return devices[0:count]
+}
+
+func cleanSymlinks(filesystem fs.Filesystem, dir string) {
+	if runtime.GOOS == "windows" {
+		// We don't do symlinks on Windows. Additionally, there may
+		// be things that look like symlinks that are not, which we
+		// should leave alone. Deduplicated files, for example.
+		return
+	}
+	filesystem.Walk(dir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsSymlink() {
+			l.Infoln("Removing incorrectly versioned symlink", path)
+			filesystem.Remove(path)
+			return fs.SkipDir
+		}
+		return nil
+	})
 }

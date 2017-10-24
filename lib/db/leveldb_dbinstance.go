@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package db
 
@@ -197,8 +197,16 @@ func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, l
 	for _, f := range fs {
 		name := []byte(f.Name)
 		fk = db.deviceKeyInto(fk[:cap(fk)], folder, device, name)
+
+		// Get and unmarshal the file entry. If it doesn't exist or can't be
+		// unmarshalled we'll add it as a new entry.
 		bs, err := t.Get(fk, nil)
-		if err == leveldb.ErrNotFound {
+		var ef FileInfoTruncated
+		if err == nil {
+			err = ef.Unmarshal(bs)
+		}
+
+		if err != nil {
 			if isLocalDevice {
 				localSize.addFile(f)
 			}
@@ -212,11 +220,6 @@ func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, l
 			continue
 		}
 
-		var ef FileInfoTruncated
-		err = ef.Unmarshal(bs)
-		if err != nil {
-			panic(err)
-		}
 		// The Invalid flag might change without the version being bumped.
 		if !ef.Version.Equal(f.Version) || ef.Invalid != f.Invalid {
 			if isLocalDevice {
@@ -262,7 +265,8 @@ func (db *Instance) withHave(folder, device, prefix []byte, truncate bool, fn It
 		// we need to copy it.
 		f, err := unmarshalTrunc(append([]byte{}, dbi.Value()...), truncate)
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 		if cont := fn(f); !cont {
 			return
@@ -286,7 +290,8 @@ func (db *Instance) withAllFolderTruncated(folder []byte, fn func(device []byte,
 		// we need to copy it.
 		err := f.Unmarshal(append([]byte{}, dbi.Value()...))
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 
 		switch f.Name {
@@ -315,32 +320,35 @@ func (db *Instance) getGlobal(folder, file []byte, truncate bool) (FileIntf, boo
 	defer t.close()
 
 	bs, err := t.Get(k, nil)
-	if err == leveldb.ErrNotFound {
-		return nil, false
-	}
 	if err != nil {
-		panic(err)
+		return nil, false
 	}
 
 	var vl VersionList
 	err = vl.Unmarshal(bs)
+	if err == leveldb.ErrNotFound {
+		return nil, false
+	}
 	if err != nil {
-		panic(err)
+		l.Debugln("unmarshal error:", k, err)
+		return nil, false
 	}
 	if len(vl.Versions) == 0 {
-		l.Debugln(k)
-		panic("no versions?")
+		l.Debugln("no versions:", k)
+		return nil, false
 	}
 
 	k = db.deviceKey(folder, vl.Versions[0].Device, file)
 	bs, err = t.Get(k, nil)
 	if err != nil {
-		panic(err)
+		l.Debugln("surprise error:", k, err)
+		return nil, false
 	}
 
 	fi, err := unmarshalTrunc(bs, truncate)
 	if err != nil {
-		panic(err)
+		l.Debugln("unmarshal error:", k, err)
+		return nil, false
 	}
 	return fi, true
 }
@@ -362,11 +370,12 @@ func (db *Instance) withGlobal(folder, prefix []byte, truncate bool, fn Iterator
 		var vl VersionList
 		err := vl.Unmarshal(dbi.Value())
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 		if len(vl.Versions) == 0 {
-			l.Debugln(dbi.Key())
-			panic("no versions?")
+			l.Debugln("no versions:", dbi.Key())
+			continue
 		}
 
 		name := db.globalKeyName(dbi.Key())
@@ -377,22 +386,14 @@ func (db *Instance) withGlobal(folder, prefix []byte, truncate bool, fn Iterator
 		fk = db.deviceKeyInto(fk[:cap(fk)], folder, vl.Versions[0].Device, name)
 		bs, err := t.Get(fk, nil)
 		if err != nil {
-			l.Debugf("folder: %q (%x)", folder, folder)
-			l.Debugf("key: %q (%x)", dbi.Key(), dbi.Key())
-			l.Debugf("vl: %v", vl)
-			l.Debugf("vl.Versions[0].Device: %x", vl.Versions[0].Device)
-			l.Debugf("name: %q (%x)", name, name)
-			l.Debugf("fk: %q", fk)
-			l.Debugf("fk: %x %x %x",
-				fk[keyPrefixLen:keyPrefixLen+keyFolderLen],
-				fk[keyPrefixLen+keyFolderLen:keyPrefixLen+keyFolderLen+keyDeviceLen],
-				fk[keyPrefixLen+keyFolderLen+keyDeviceLen:])
-			panic(err)
+			l.Debugln("surprise error:", err)
+			continue
 		}
 
 		f, err := unmarshalTrunc(bs, truncate)
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 
 		if cont := fn(f); !cont {
@@ -408,13 +409,15 @@ func (db *Instance) availability(folder, file []byte) []protocol.DeviceID {
 		return nil
 	}
 	if err != nil {
-		panic(err)
+		l.Debugln("surprise error:", err)
+		return nil
 	}
 
 	var vl VersionList
 	err = vl.Unmarshal(bs)
 	if err != nil {
-		panic(err)
+		l.Debugln("unmarshal error:", err)
+		return nil
 	}
 
 	var devices []protocol.DeviceID
@@ -442,11 +445,12 @@ nextFile:
 		var vl VersionList
 		err := vl.Unmarshal(dbi.Value())
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 		if len(vl.Versions) == 0 {
-			l.Debugln(dbi.Key())
-			panic("no versions?")
+			l.Debugln("no versions:", dbi.Key())
+			continue
 		}
 
 		have := false // If we have the file, any version
@@ -477,21 +481,14 @@ nextFile:
 				fk = db.deviceKeyInto(fk[:cap(fk)], folder, vl.Versions[i].Device, name)
 				bs, err := t.Get(fk, nil)
 				if err != nil {
-					var id protocol.DeviceID
-					copy(id[:], device)
-					l.Debugf("device: %v", id)
-					l.Debugf("need: %v, have: %v", need, have)
-					l.Debugf("key: %q (%x)", dbi.Key(), dbi.Key())
-					l.Debugf("vl: %v", vl)
-					l.Debugf("i: %v", i)
-					l.Debugf("fk: %q (%x)", fk, fk)
-					l.Debugf("name: %q (%x)", name, name)
-					panic(err)
+					l.Debugln("surprise error:", err)
+					continue nextVersion
 				}
 
 				gf, err := unmarshalTrunc(bs, truncate)
 				if err != nil {
-					panic(err)
+					l.Debugln("unmarshal error:", err)
+					continue nextVersion
 				}
 
 				if gf.IsInvalid() {
@@ -526,9 +523,9 @@ func (db *Instance) ListFolders() []string {
 
 	folderExists := make(map[string]bool)
 	for dbi.Next() {
-		folder := string(db.globalKeyFolder(dbi.Key()))
-		if !folderExists[folder] {
-			folderExists[folder] = true
+		folder, ok := db.globalKeyFolder(dbi.Key())
+		if ok && !folderExists[string(folder)] {
+			folderExists[string(folder)] = true
 		}
 	}
 
@@ -558,8 +555,8 @@ func (db *Instance) dropFolder(folder []byte) {
 	// Remove all items related to the given folder from the global bucket
 	dbi = t.NewIterator(util.BytesPrefix([]byte{KeyTypeGlobal}), nil)
 	for dbi.Next() {
-		itemFolder := db.globalKeyFolder(dbi.Key())
-		if bytes.Equal(folder, itemFolder) {
+		itemFolder, ok := db.globalKeyFolder(dbi.Key())
+		if ok && bytes.Equal(folder, itemFolder) {
 			db.Delete(dbi.Key(), nil)
 		}
 	}
@@ -579,7 +576,8 @@ func (db *Instance) checkGlobals(folder []byte, globalSize *sizeTracker) {
 		var vl VersionList
 		err := vl.Unmarshal(dbi.Value())
 		if err != nil {
-			panic(err)
+			l.Debugln("unmarshal error:", err)
+			continue
 		}
 
 		// Check the global version list for consistency. An issue in previous
@@ -597,16 +595,15 @@ func (db *Instance) checkGlobals(folder []byte, globalSize *sizeTracker) {
 				continue
 			}
 			if err != nil {
-				panic(err)
+				l.Debugln("surprise error:", err)
+				return
 			}
 			newVL.Versions = append(newVL.Versions, version)
 
 			if i == 0 {
-				fi, ok := t.getFile(folder, version.Device, name)
-				if !ok {
-					panic("nonexistent global master file")
+				if fi, ok := t.getFile(folder, version.Device, name); ok {
+					globalSize.addFile(fi)
 				}
-				globalSize.addFile(fi)
 			}
 		}
 
@@ -616,6 +613,41 @@ func (db *Instance) checkGlobals(folder []byte, globalSize *sizeTracker) {
 		}
 	}
 	l.Debugf("db check completed for %q", folder)
+}
+
+// ConvertSymlinkTypes should be run once only on an old database. It
+// changes SYMLINK_FILE and SYMLINK_DIRECTORY types to the current SYMLINK
+// type (previously SYMLINK_UNKNOWN). It does this for all devices, both
+// local and remote, and does not reset delta indexes. It shouldn't really
+// matter what the symlink type is, but this cleans it up for a possible
+// future when SYMLINK_FILE and SYMLINK_DIRECTORY are no longer understood.
+func (db *Instance) ConvertSymlinkTypes() {
+	t := db.newReadWriteTransaction()
+	defer t.close()
+
+	dbi := t.NewIterator(util.BytesPrefix([]byte{KeyTypeDevice}), nil)
+	defer dbi.Release()
+
+	conv := 0
+	for dbi.Next() {
+		var f protocol.FileInfo
+		if err := f.Unmarshal(dbi.Value()); err != nil {
+			// probably can't happen
+			continue
+		}
+		if f.Type == protocol.FileInfoTypeDeprecatedSymlinkDirectory || f.Type == protocol.FileInfoTypeDeprecatedSymlinkFile {
+			f.Type = protocol.FileInfoTypeSymlink
+			bs, err := f.Marshal()
+			if err != nil {
+				panic("can't happen: " + err.Error())
+			}
+			t.Put(dbi.Key(), bs)
+			t.checkFlush()
+			conv++
+		}
+	}
+
+	l.Infof("Updated symlink type for %d index entries", conv)
 }
 
 // deviceKey returns a byte slice encoding the following information:
@@ -635,7 +667,7 @@ func (db *Instance) deviceKeyInto(k []byte, folder, device, file []byte) []byte 
 	k[0] = KeyTypeDevice
 	binary.BigEndian.PutUint32(k[keyPrefixLen:], db.folderIdx.ID(folder))
 	binary.BigEndian.PutUint32(k[keyPrefixLen+keyFolderLen:], db.deviceIdx.ID(device))
-	copy(k[keyPrefixLen+keyFolderLen+keyDeviceLen:], []byte(file))
+	copy(k[keyPrefixLen+keyFolderLen+keyDeviceLen:], file)
 	return k[:reqLen]
 }
 
@@ -670,7 +702,7 @@ func (db *Instance) globalKey(folder, file []byte) []byte {
 	k := make([]byte, keyPrefixLen+keyFolderLen+len(file))
 	k[0] = KeyTypeGlobal
 	binary.BigEndian.PutUint32(k[keyPrefixLen:], db.folderIdx.ID(folder))
-	copy(k[keyPrefixLen+keyFolderLen:], []byte(file))
+	copy(k[keyPrefixLen+keyFolderLen:], file)
 	return k
 }
 
@@ -680,12 +712,8 @@ func (db *Instance) globalKeyName(key []byte) []byte {
 }
 
 // globalKeyFolder returns the folder name from the key
-func (db *Instance) globalKeyFolder(key []byte) []byte {
-	folder, ok := db.folderIdx.Val(binary.BigEndian.Uint32(key[keyPrefixLen:]))
-	if !ok {
-		panic("bug: lookup of nonexistent folder ID")
-	}
-	return folder
+func (db *Instance) globalKeyFolder(key []byte) ([]byte, bool) {
+	return db.folderIdx.Val(binary.BigEndian.Uint32(key[keyPrefixLen:]))
 }
 
 func (db *Instance) getIndexID(device, folder []byte) protocol.IndexID {

@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package versioner
 
@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/d4l3k/messagediff"
+	"github.com/syncthing/syncthing/lib/fs"
 )
 
 func TestStaggeredVersioningVersionCount(t *testing.T) {
@@ -62,9 +63,12 @@ func TestStaggeredVersioningVersionCount(t *testing.T) {
 	os.MkdirAll("testdata/.stversions", 0755)
 	defer os.RemoveAll("testdata")
 
-	testCleanDone = make(chan struct{})
-	v := NewStaggered("", "testdata", map[string]string{"maxAge": strconv.Itoa(365 * 86400)}).(Staggered)
-	<-testCleanDone
+	v := NewStaggered("", fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata"), map[string]string{"maxAge": strconv.Itoa(365 * 86400)}).(*Staggered)
+	v.testCleanDone = make(chan struct{})
+	defer v.Stop()
+	go v.Serve()
+
+	<-v.testCleanDone
 
 	rem := v.toRemove(files, now)
 	if diff, equal := messagediff.PrettyDiff(delete, rem); !equal {

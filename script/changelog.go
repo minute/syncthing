@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // +build ignore
 
@@ -108,6 +108,9 @@ func runError(cmd string, args ...string) ([]byte, error) {
 
 func githubIssueTitle(n int) (string, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("https://api.github.com/repos/syncthing/syncthing/issues/%d", n), nil)
+	if err != nil {
+		return "", err
+	}
 
 	user, token := os.Getenv("GITHUB_USERNAME"), os.Getenv("GITHUB_TOKEN")
 	if user != "" && token != "" {

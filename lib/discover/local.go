@@ -2,10 +2,10 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //go:generate go run ../../script/protofmt.go local.proto
-//go:generate protoc -I ../../../../../ -I ../../../../gogo/protobuf/protobuf -I . --gogofast_out=. local.proto
+//go:generate protoc -I ../../vendor/ -I ../../vendor/github.com/gogo/protobuf/protobuf -I . --gogofast_out=. local.proto
 
 package discover
 
@@ -51,7 +51,7 @@ func NewLocal(id protocol.DeviceID, addr string, addrList AddressLister) (Finder
 		Supervisor:      suture.NewSimple("local"),
 		myID:            id,
 		addrList:        addrList,
-		localBcastTick:  time.Tick(BroadcastInterval),
+		localBcastTick:  time.NewTicker(BroadcastInterval).C,
 		forcedBcastTick: make(chan time.Time),
 		localBcastStart: time.Now(),
 		cache:           newCache(),

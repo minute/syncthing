@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 // +build ignore
 
@@ -12,7 +12,9 @@ import (
 	"archive/tar"
 	"archive/zip"
 	"bytes"
+	"compress/flate"
 	"compress/gzip"
+	"crypto/sha256"
 	"errors"
 	"flag"
 	"fmt"
@@ -27,24 +29,31 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"syscall"
 	"text/template"
 	"time"
 )
 
 var (
-	versionRe = regexp.MustCompile(`-[0-9]{1,3}-g[0-9a-f]{5,10}`)
-	goarch    string
-	goos      string
-	noupgrade bool
-	version   string
-	goVersion float64
-	race      bool
-	debug     = os.Getenv("BUILDDEBUG") != ""
+	versionRe     = regexp.MustCompile(`-[0-9]{1,3}-g[0-9a-f]{5,10}`)
+	goarch        string
+	goos          string
+	noupgrade     bool
+	version       string
+	goVersion     float64
+	race          bool
+	debug         = os.Getenv("BUILDDEBUG") != ""
+	noBuildGopath bool
+	extraTags     string
+	installSuffix string
+	pkgdir        string
 )
 
 type target struct {
 	name              string
+	debname           string
+	debdeps           []string
+	debpost           string
+	description       string
 	buildPkg          string
 	binaryName        string
 	archiveFiles      []archiveFile
@@ -62,14 +71,18 @@ var targets = map[string]target{
 	"all": {
 		// Only valid for the "build" and "install" commands as it lacks all
 		// the archive creation stuff.
-		buildPkg: "./cmd/...",
+		buildPkg: "github.com/syncthing/syncthing/cmd/...",
 		tags:     []string{"purego"},
 	},
 	"syncthing": {
 		// The default target for "build", "install", "tar", "zip", "deb", etc.
-		name:       "syncthing",
-		buildPkg:   "./cmd/syncthing",
-		binaryName: "syncthing", // .exe will be added automatically for Windows builds
+		name:        "syncthing",
+		debname:     "syncthing",
+		debdeps:     []string{"libc6", "procps"},
+		debpost:     "script/post-upgrade",
+		description: "Open Source Continuous File Synchronization",
+		buildPkg:    "github.com/syncthing/syncthing/cmd/syncthing",
+		binaryName:  "syncthing", // .exe will be added automatically for Windows builds
 		archiveFiles: []archiveFile{
 			{src: "{{binary}}", dst: "{{binary}}", perm: 0755},
 			{src: "README.md", dst: "README.txt", perm: 0644},
@@ -99,9 +112,12 @@ var targets = map[string]target{
 		},
 	},
 	"stdiscosrv": {
-		name:       "stdiscosrv",
-		buildPkg:   "./cmd/stdiscosrv",
-		binaryName: "stdiscosrv", // .exe will be added automatically for Windows builds
+		name:        "stdiscosrv",
+		debname:     "syncthing-discosrv",
+		debdeps:     []string{"libc6"},
+		description: "Syncthing Discovery Server",
+		buildPkg:    "github.com/syncthing/syncthing/cmd/stdiscosrv",
+		binaryName:  "stdiscosrv", // .exe will be added automatically for Windows builds
 		archiveFiles: []archiveFile{
 			{src: "{{binary}}", dst: "{{binary}}", perm: 0755},
 			{src: "cmd/stdiscosrv/README.md", dst: "README.txt", perm: 0644},
@@ -110,17 +126,20 @@ var targets = map[string]target{
 		},
 		installationFiles: []archiveFile{
 			{src: "{{binary}}", dst: "deb/usr/bin/{{binary}}", perm: 0755},
-			{src: "cmd/stdiscosrv/README.md", dst: "deb/usr/share/doc/stdiscosrv/README.txt", perm: 0644},
-			{src: "cmd/stdiscosrv/LICENSE", dst: "deb/usr/share/doc/stdiscosrv/LICENSE.txt", perm: 0644},
-			{src: "AUTHORS", dst: "deb/usr/share/doc/stdiscosrv/AUTHORS.txt", perm: 0644},
+			{src: "cmd/stdiscosrv/README.md", dst: "deb/usr/share/doc/syncthing-discosrv/README.txt", perm: 0644},
+			{src: "cmd/stdiscosrv/LICENSE", dst: "deb/usr/share/doc/syncthing-discosrv/LICENSE.txt", perm: 0644},
+			{src: "AUTHORS", dst: "deb/usr/share/doc/syncthing-discosrv/AUTHORS.txt", perm: 0644},
 			{src: "man/stdiscosrv.1", dst: "deb/usr/share/man/man1/stdiscosrv.1", perm: 0644},
 		},
 		tags: []string{"purego"},
 	},
 	"strelaysrv": {
-		name:       "strelaysrv",
-		buildPkg:   "./cmd/strelaysrv",
-		binaryName: "strelaysrv", // .exe will be added automatically for Windows builds
+		name:        "strelaysrv",
+		debname:     "syncthing-relaysrv",
+		debdeps:     []string{"libc6"},
+		description: "Syncthing Relay Server",
+		buildPkg:    "github.com/syncthing/syncthing/cmd/strelaysrv",
+		binaryName:  "strelaysrv", // .exe will be added automatically for Windows builds
 		archiveFiles: []archiveFile{
 			{src: "{{binary}}", dst: "{{binary}}", perm: 0755},
 			{src: "cmd/strelaysrv/README.md", dst: "README.txt", perm: 0644},
@@ -129,16 +148,19 @@ var targets = map[string]target{
 		},
 		installationFiles: []archiveFile{
 			{src: "{{binary}}", dst: "deb/usr/bin/{{binary}}", perm: 0755},
-			{src: "cmd/strelaysrv/README.md", dst: "deb/usr/share/doc/strelaysrv/README.txt", perm: 0644},
-			{src: "cmd/strelaysrv/LICENSE", dst: "deb/usr/share/doc/strelaysrv/LICENSE.txt", perm: 0644},
-			{src: "AUTHORS", dst: "deb/usr/share/doc/strelaysrv/AUTHORS.txt", perm: 0644},
+			{src: "cmd/strelaysrv/README.md", dst: "deb/usr/share/doc/syncthing-relaysrv/README.txt", perm: 0644},
+			{src: "cmd/strelaysrv/LICENSE", dst: "deb/usr/share/doc/syncthing-relaysrv/LICENSE.txt", perm: 0644},
+			{src: "AUTHORS", dst: "deb/usr/share/doc/syncthing-relaysrv/AUTHORS.txt", perm: 0644},
 			{src: "man/strelaysrv.1", dst: "deb/usr/share/man/man1/strelaysrv.1", perm: 0644},
 		},
 	},
 	"strelaypoolsrv": {
-		name:       "strelaypoolsrv",
-		buildPkg:   "./cmd/strelaypoolsrv",
-		binaryName: "strelaypoolsrv", // .exe will be added automatically for Windows builds
+		name:        "strelaypoolsrv",
+		debname:     "syncthing-relaypoolsrv",
+		debdeps:     []string{"libc6"},
+		description: "Syncthing Relay Pool Server",
+		buildPkg:    "github.com/syncthing/syncthing/cmd/strelaypoolsrv",
+		binaryName:  "strelaypoolsrv", // .exe will be added automatically for Windows builds
 		archiveFiles: []archiveFile{
 			{src: "{{binary}}", dst: "{{binary}}", perm: 0755},
 			{src: "cmd/strelaypoolsrv/README.md", dst: "README.txt", perm: 0644},
@@ -147,9 +169,9 @@ var targets = map[string]target{
 		},
 		installationFiles: []archiveFile{
 			{src: "{{binary}}", dst: "deb/usr/bin/{{binary}}", perm: 0755},
-			{src: "cmd/strelaypoolsrv/README.md", dst: "deb/usr/share/doc/relaysrv/README.txt", perm: 0644},
-			{src: "cmd/strelaypoolsrv/LICENSE", dst: "deb/usr/share/doc/relaysrv/LICENSE.txt", perm: 0644},
-			{src: "AUTHORS", dst: "deb/usr/share/doc/relaysrv/AUTHORS.txt", perm: 0644},
+			{src: "cmd/strelaypoolsrv/README.md", dst: "deb/usr/share/doc/syncthing-relaypoolsrv/README.txt", perm: 0644},
+			{src: "cmd/strelaypoolsrv/LICENSE", dst: "deb/usr/share/doc/syncthing-relaypoolsrv/LICENSE.txt", perm: 0644},
+			{src: "AUTHORS", dst: "deb/usr/share/doc/syncthing-relaypoolsrv/AUTHORS.txt", perm: 0644},
 		},
 	},
 }
@@ -170,11 +192,10 @@ func init() {
 	targets["syncthing"] = syncthingPkg
 }
 
-const minGoVersion = 1.5
-
 func main() {
-	log.SetOutput(os.Stdout)
 	log.SetFlags(0)
+
+	parseFlags()
 
 	if debug {
 		t0 := time.Now()
@@ -183,28 +204,45 @@ func main() {
 		}()
 	}
 
-	if os.Getenv("GOPATH") == "" {
-		setGoPath()
+	if gopath := gopath(); gopath == "" {
+		gopath, err := temporaryBuildDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if !noBuildGopath {
+			lazyRebuildAssets()
+			if err := buildGOPATH(gopath); err != nil {
+				log.Fatal(err)
+			}
+		}
+		os.Setenv("GOPATH", gopath)
+		log.Println("GOPATH is", gopath)
+	} else {
+		inside := false
+		wd, _ := os.Getwd()
+		wd, _ = filepath.EvalSymlinks(wd)
+		for _, p := range filepath.SplitList(gopath) {
+			p, _ = filepath.EvalSymlinks(p)
+			if filepath.Join(p, "src/github.com/syncthing/syncthing") == wd {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			fmt.Println("You seem to have GOPATH set but the Syncthing source not placed correctly within it, which may cause problems.")
+		}
 	}
-
-	// We use Go 1.5+ vendoring.
-	os.Setenv("GO15VENDOREXPERIMENT", "1")
 
 	// Set path to $GOPATH/bin:$PATH so that we can for sure find tools we
 	// might have installed during "build.go setup".
 	os.Setenv("PATH", fmt.Sprintf("%s%cbin%c%s", os.Getenv("GOPATH"), os.PathSeparator, os.PathListSeparator, os.Getenv("PATH")))
 
-	parseFlags()
-
 	checkArchitecture()
-	goVersion, _ = checkRequiredGoVersion()
 
 	// Invoking build.go with no parameters at all builds everything (incrementally),
 	// which is what you want for maximum error checking during development.
 	if flag.NArg() == 0 {
 		runCommand("install", targets["all"])
-		runCommand("vet", target{})
-		runCommand("lint", target{})
 	} else {
 		// with any command given but not a target, the target is
 		// "syncthing". So "go run build.go install" is "go run build.go install
@@ -224,7 +262,7 @@ func main() {
 
 func checkArchitecture() {
 	switch goarch {
-	case "386", "amd64", "arm", "arm64", "ppc64", "ppc64le":
+	case "386", "amd64", "arm", "arm64", "ppc64", "ppc64le", "mips", "mipsle":
 		break
 	default:
 		log.Printf("Unknown goarch %q; proceed with caution!", goarch)
@@ -241,20 +279,23 @@ func runCommand(cmd string, target target) {
 		if noupgrade {
 			tags = []string{"noupgrade"}
 		}
+		tags = append(tags, strings.Fields(extraTags)...)
 		install(target, tags)
+		metalintShort()
 
 	case "build":
 		var tags []string
 		if noupgrade {
 			tags = []string{"noupgrade"}
 		}
+		tags = append(tags, strings.Fields(extraTags)...)
 		build(target, tags)
 
 	case "test":
-		test("./lib/...", "./cmd/...")
+		test("github.com/syncthing/syncthing/lib/...", "github.com/syncthing/syncthing/cmd/...")
 
 	case "bench":
-		bench("./lib/...", "./cmd/...")
+		bench("github.com/syncthing/syncthing/lib/...", "github.com/syncthing/syncthing/cmd/...")
 
 	case "assets":
 		rebuildAssets()
@@ -284,43 +325,27 @@ func runCommand(cmd string, target target) {
 		clean()
 
 	case "vet":
-		vet("build.go")
-		vet("cmd", "lib")
+		metalintShort()
 
 	case "lint":
-		lint(".")
-		lint("./cmd/...")
-		lint("./lib/...")
+		metalintShort()
 
 	case "metalint":
-		if isGometalinterInstalled() {
-			dirs := []string{".", "./cmd/...", "./lib/..."}
-			ok := gometalinter("deadcode", dirs, "test/util.go")
-			ok = gometalinter("structcheck", dirs) && ok
-			ok = gometalinter("varcheck", dirs) && ok
-			if !ok {
-				os.Exit(1)
-			}
-		}
+		metalint()
 
 	case "version":
 		fmt.Println(getVersion())
 
+	case "gopath":
+		gopath, err := temporaryBuildDir()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Println(gopath)
+
 	default:
 		log.Fatalf("Unknown command %q", cmd)
 	}
-}
-
-// setGoPath sets GOPATH correctly with the assumption that we are
-// in $GOPATH/src/github.com/syncthing/syncthing.
-func setGoPath() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Fatal(err)
-	}
-	gopath := filepath.Clean(filepath.Join(cwd, "../../../../"))
-	log.Println("GOPATH is", gopath)
-	os.Setenv("GOPATH", gopath)
 }
 
 func parseFlags() {
@@ -329,41 +354,37 @@ func parseFlags() {
 	flag.BoolVar(&noupgrade, "no-upgrade", noupgrade, "Disable upgrade functionality")
 	flag.StringVar(&version, "version", getVersion(), "Set compiled in version string")
 	flag.BoolVar(&race, "race", race, "Use race detector")
+	flag.BoolVar(&noBuildGopath, "no-build-gopath", noBuildGopath, "Don't build GOPATH, assume it's OK")
+	flag.StringVar(&extraTags, "tags", extraTags, "Extra tags, space separated")
+	flag.StringVar(&installSuffix, "installsuffix", installSuffix, "Install suffix, optional")
+	flag.StringVar(&pkgdir, "pkgdir", "", "Set -pkgdir parameter for `go build`")
 	flag.Parse()
 }
 
-func checkRequiredGoVersion() (float64, bool) {
-	re := regexp.MustCompile(`go(\d+\.\d+)`)
-	ver := runtime.Version()
-	if m := re.FindStringSubmatch(ver); len(m) == 2 {
-		vs := string(m[1])
-		// This is a standard go build. Verify that it's new enough.
-		f, err := strconv.ParseFloat(vs, 64)
-		if err != nil {
-			log.Printf("*** Couldn't parse Go version out of %q.\n*** This isn't known to work, proceed on your own risk.", vs)
-			return 0, false
-		}
-		if f < 1.5 {
-			log.Printf("*** Go version %.01f doesn't support the vendoring mechanism.\n*** Ensure correct dependencies in your $GOPATH.", f)
-		} else if f < minGoVersion {
-			log.Fatalf("*** Go version %.01f is less than required %.01f.\n*** This is known not to work, not proceeding.", f, minGoVersion)
-		}
-		return f, true
+func setup() {
+	packages := []string{
+		"github.com/alecthomas/gometalinter",
+		"github.com/AlekSi/gocov-xml",
+		"github.com/axw/gocov/gocov",
+		"github.com/FiloSottile/gvt",
+		"github.com/golang/lint/golint",
+		"github.com/gordonklaus/ineffassign",
+		"github.com/mdempsky/unconvert",
+		"github.com/mitchellh/go-wordwrap",
+		"github.com/opennota/check/cmd/...",
+		"github.com/tsenart/deadcode",
+		"golang.org/x/net/html",
+		"golang.org/x/tools/cmd/cover",
+		"honnef.co/go/tools/cmd/gosimple",
+		"honnef.co/go/tools/cmd/staticcheck",
+		"honnef.co/go/tools/cmd/unused",
+	}
+	for _, pkg := range packages {
+		fmt.Println(pkg)
+		runPrint("go", "get", "-u", pkg)
 	}
 
-	log.Printf("*** Unknown Go version %q.\n*** This isn't known to work, proceed on your own risk.", ver)
-	return 0, false
-}
-
-func setup() {
-	runPrint("go", "get", "-v", "github.com/golang/lint/golint")
-	runPrint("go", "get", "-v", "golang.org/x/tools/cmd/cover")
-	runPrint("go", "get", "-v", "golang.org/x/net/html")
-	runPrint("go", "get", "-v", "github.com/FiloSottile/gvt")
-	runPrint("go", "get", "-v", "github.com/axw/gocov/gocov")
-	runPrint("go", "get", "-v", "github.com/AlekSi/gocov-xml")
-	runPrint("go", "get", "-v", "github.com/alecthomas/gometalinter")
-	runPrint("go", "get", "-v", "github.com/mitchellh/go-wordwrap")
+	runPrint("go", "install", "-v", "github.com/syncthing/syncthing/vendor/github.com/gogo/protobuf/protoc-gen-gogofast")
 }
 
 func test(pkgs ...string) {
@@ -399,8 +420,14 @@ func install(target target, tags []string) {
 	}
 	os.Setenv("GOBIN", filepath.Join(cwd, "bin"))
 	args := []string{"install", "-v", "-ldflags", ldflags()}
+	if pkgdir != "" {
+		args = append(args, "-pkgdir", pkgdir)
+	}
 	if len(tags) > 0 {
 		args = append(args, "-tags", strings.Join(tags, " "))
+	}
+	if installSuffix != "" {
+		args = append(args, "-installsuffix", installSuffix)
 	}
 	if race {
 		args = append(args, "-race")
@@ -417,10 +444,16 @@ func build(target target, tags []string) {
 
 	tags = append(target.tags, tags...)
 
-	rmr(target.binaryName)
+	rmr(target.BinaryName())
 	args := []string{"build", "-i", "-v", "-ldflags", ldflags()}
+	if pkgdir != "" {
+		args = append(args, "-pkgdir", pkgdir)
+	}
 	if len(tags) > 0 {
 		args = append(args, "-tags", strings.Join(tags, " "))
+	}
+	if installSuffix != "" {
+		args = append(args, "-installsuffix", installSuffix)
 	}
 	if race {
 		args = append(args, "-race")
@@ -445,22 +478,20 @@ func buildTar(target target) {
 	build(target, tags)
 
 	if goos == "darwin" {
-		macosCodesign(target.binaryName)
+		macosCodesign(target.BinaryName())
 	}
 
 	for i := range target.archiveFiles {
-		target.archiveFiles[i].src = strings.Replace(target.archiveFiles[i].src, "{{binary}}", target.binaryName, 1)
-		target.archiveFiles[i].dst = strings.Replace(target.archiveFiles[i].dst, "{{binary}}", target.binaryName, 1)
+		target.archiveFiles[i].src = strings.Replace(target.archiveFiles[i].src, "{{binary}}", target.BinaryName(), 1)
+		target.archiveFiles[i].dst = strings.Replace(target.archiveFiles[i].dst, "{{binary}}", target.BinaryName(), 1)
 		target.archiveFiles[i].dst = name + "/" + target.archiveFiles[i].dst
 	}
 
 	tarGz(filename, target.archiveFiles)
-	log.Println(filename)
+	fmt.Println(filename)
 }
 
 func buildZip(target target) {
-	target.binaryName += ".exe"
-
 	name := archiveName(target)
 	filename := name + ".zip"
 
@@ -473,13 +504,13 @@ func buildZip(target target) {
 	build(target, tags)
 
 	for i := range target.archiveFiles {
-		target.archiveFiles[i].src = strings.Replace(target.archiveFiles[i].src, "{{binary}}", target.binaryName, 1)
-		target.archiveFiles[i].dst = strings.Replace(target.archiveFiles[i].dst, "{{binary}}", target.binaryName, 1)
+		target.archiveFiles[i].src = strings.Replace(target.archiveFiles[i].src, "{{binary}}", target.BinaryName(), 1)
+		target.archiveFiles[i].dst = strings.Replace(target.archiveFiles[i].dst, "{{binary}}", target.BinaryName(), 1)
 		target.archiveFiles[i].dst = name + "/" + target.archiveFiles[i].dst
 	}
 
 	zipFile(filename, target.archiveFiles)
-	log.Println(filename)
+	fmt.Println(filename)
 }
 
 func buildDeb(target target) {
@@ -499,8 +530,8 @@ func buildDeb(target target) {
 	build(target, []string{"noupgrade"})
 
 	for i := range target.installationFiles {
-		target.installationFiles[i].src = strings.Replace(target.installationFiles[i].src, "{{binary}}", target.binaryName, 1)
-		target.installationFiles[i].dst = strings.Replace(target.installationFiles[i].dst, "{{binary}}", target.binaryName, 1)
+		target.installationFiles[i].src = strings.Replace(target.installationFiles[i].src, "{{binary}}", target.BinaryName(), 1)
+		target.installationFiles[i].dst = strings.Replace(target.installationFiles[i].dst, "{{binary}}", target.BinaryName(), 1)
 	}
 
 	for _, af := range target.installationFiles {
@@ -513,16 +544,31 @@ func buildDeb(target target) {
 	debver := version
 	if strings.HasPrefix(debver, "v") {
 		debver = debver[1:]
+		// Debian interprets dashes as separator between main version and
+		// Debian package version, and thus thinks 0.14.26-rc.1 is better
+		// than just 0.14.26. This rectifies that.
+		debver = strings.Replace(debver, "-", "~", -1)
 	}
-	runPrint("fpm", "-t", "deb", "-s", "dir", "-C", "deb",
-		"-n", "syncthing", "-v", debver, "-a", debarch,
-		"--vendor", maintainer, "-m", maintainer,
-		"-d", "libc6",
-		"-d", "procps", // because postinst script
+	args := []string{
+		"-t", "deb",
+		"-s", "dir",
+		"-C", "deb",
+		"-n", target.debname,
+		"-v", debver,
+		"-a", debarch,
+		"-m", maintainer,
+		"--vendor", maintainer,
+		"--description", target.description,
 		"--url", "https://syncthing.net/",
-		"--description", "Open Source Continuous File Synchronization",
-		"--after-upgrade", "script/post-upgrade",
-		"--license", "MPL-2")
+		"--license", "MPL-2",
+	}
+	for _, dep := range target.debdeps {
+		args = append(args, "-d", dep)
+	}
+	if target.debpost != "" {
+		args = append(args, "--after-upgrade", target.debpost)
+	}
+	runPrint("fpm", args...)
 }
 
 func buildSnap(target target) {
@@ -547,7 +593,7 @@ func buildSnap(target target) {
 		snapver = snapver[1:]
 	}
 	snapgrade := "devel"
-	if matched, _ := regexp.MatchString(`^\d+\.\d+\.\d+$`, snapver); matched {
+	if matched, _ := regexp.MatchString(`^\d+\.\d+\.\d+(-rc.\d+)?$`, snapver); matched {
 		snapgrade = "stable"
 	}
 	err = tmpl.Execute(f, map[string]string{
@@ -563,21 +609,36 @@ func buildSnap(target target) {
 	runPrint("snapcraft")
 }
 
+// copyFile copies a file from src to dst, ensuring the containing directory
+// exists. The permission bits are copied as well. If dst already exists and
+// the contents are identical to src the modification time is not updated.
 func copyFile(src, dst string, perm os.FileMode) error {
-	dstDir := filepath.Dir(dst)
-	os.MkdirAll(dstDir, 0755) // ignore error
-	srcFd, err := os.Open(src)
+	in, err := ioutil.ReadFile(src)
 	if err != nil {
 		return err
 	}
-	defer srcFd.Close()
-	dstFd, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, perm)
+
+	out, err := ioutil.ReadFile(dst)
 	if err != nil {
+		// The destination probably doesn't exist, we should create
+		// it.
+		goto copy
+	}
+
+	if bytes.Equal(in, out) {
+		// The permission bits may have changed without the contents
+		// changing so we always mirror them.
+		os.Chmod(dst, perm)
+		return nil
+	}
+
+copy:
+	os.MkdirAll(filepath.Dir(dst), 0777)
+	if err := ioutil.WriteFile(dst, in, perm); err != nil {
 		return err
 	}
-	defer dstFd.Close()
-	_, err = io.Copy(dstFd, srcFd)
-	return err
+
+	return nil
 }
 
 func listFiles(dir string) []string {
@@ -632,7 +693,7 @@ func shouldRebuildAssets(target, srcdir string) bool {
 }
 
 func proto() {
-	runPrint("go", "generate", "./lib/...")
+	runPrint("go", "generate", "github.com/syncthing/syncthing/lib/...")
 }
 
 func translate() {
@@ -759,8 +820,9 @@ func getBranchSuffix() string {
 	}
 
 	branch = parts[len(parts)-1]
-	if branch == "master" {
-		// master builds are the default.
+	switch branch {
+	case "master", "release":
+		// these are not special
 		return ""
 	}
 
@@ -884,7 +946,10 @@ func tarGz(out string, files []archiveFile) {
 		log.Fatal(err)
 	}
 
-	gw := gzip.NewWriter(fd)
+	gw, err := gzip.NewWriterLevel(fd, gzip.BestCompression)
+	if err != nil {
+		log.Fatal(err)
+	}
 	tw := tar.NewWriter(gw)
 
 	for _, f := range files {
@@ -936,6 +1001,21 @@ func zipFile(out string, files []archiveFile) {
 	}
 
 	zw := zip.NewWriter(fd)
+
+	var fw *flate.Writer
+
+	// Register the deflator.
+	zw.RegisterCompressor(zip.Deflate, func(out io.Writer) (io.WriteCloser, error) {
+		var err error
+		if fw == nil {
+			// Creating a flate compressor for every file is
+			// expensive, create one and reuse it.
+			fw, err = flate.NewWriter(out, flate.BestCompression)
+		} else {
+			fw.Reset(out)
+		}
+		return fw, err
+	})
 
 	for _, f := range files {
 		sf, err := os.Open(f.src)
@@ -993,48 +1073,6 @@ func zipFile(out string, files []archiveFile) {
 	}
 }
 
-func vet(dirs ...string) {
-	params := []string{"tool", "vet", "-all"}
-	params = append(params, dirs...)
-	bs, err := runError("go", params...)
-
-	if len(bs) > 0 {
-		log.Printf("%s", bs)
-	}
-
-	if err != nil {
-		if exitStatus(err) == 3 {
-			// Exit code 3, the "vet" tool is not installed
-			return
-		}
-
-		// A genuine error exit from the vet tool.
-		log.Fatal(err)
-	}
-}
-
-func lint(pkg string) {
-	bs, err := runError("golint", pkg)
-	if err != nil {
-		log.Println(`- No golint, not linting. Try "go get -u github.com/golang/lint/golint".`)
-		return
-	}
-
-	analCommentPolicy := regexp.MustCompile(`exported (function|method|const|type|var) [^\s]+ should have comment`)
-	for _, line := range strings.Split(string(bs), "\n") {
-		if line == "" {
-			continue
-		}
-		if analCommentPolicy.MatchString(line) {
-			continue
-		}
-		if strings.Contains(line, ".pb.go:") {
-			continue
-		}
-		log.Println(line)
-	}
-}
-
 func macosCodesign(file string) {
 	if pass := os.Getenv("CODESIGN_KEYCHAIN_PASS"); pass != "" {
 		bs, err := runError("security", "unlock-keychain", "-p", pass)
@@ -1054,50 +1092,129 @@ func macosCodesign(file string) {
 	}
 }
 
-func exitStatus(err error) int {
-	if err, ok := err.(*exec.ExitError); ok {
-		if ws, ok := err.ProcessState.Sys().(syscall.WaitStatus); ok {
-			return ws.ExitStatus()
-		}
-	}
-
-	return -1
+func metalint() {
+	lazyRebuildAssets()
+	runPrint("go", "test", "-run", "Metalint", "./meta")
 }
 
-func isGometalinterInstalled() bool {
-	if _, err := runError("gometalinter", "--disable-all"); err != nil {
-		log.Println("gometalinter is not installed")
-		return false
-	}
-	return true
+func metalintShort() {
+	lazyRebuildAssets()
+	runPrint("go", "test", "-short", "-run", "Metalint", "./meta")
 }
 
-func gometalinter(linter string, dirs []string, excludes ...string) bool {
-	params := []string{"--disable-all"}
-	params = append(params, fmt.Sprintf("--deadline=%ds", 60))
-	params = append(params, "--enable="+linter)
+func temporaryBuildDir() (string, error) {
+	// The base of our temp dir is "syncthing-xxxxxxxx" where the x:es
+	// are eight bytes from the sha256 of our working directory. We do
+	// this because we want a name in the global temp dir that doesn't
+	// conflict with someone else building syncthing on the same
+	// machine, yet is persistent between runs from the same source
+	// directory.
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256([]byte(wd))
+	base := fmt.Sprintf("syncthing-%x", hash[:4])
 
-	for _, exclude := range excludes {
-		params = append(params, "--exclude="+exclude)
+	// The temp dir is taken from $STTMPDIR if set, otherwise the system
+	// default (potentially infrluenced by $TMPDIR on unixes).
+	var tmpDir string
+	if t := os.Getenv("STTMPDIR"); t != "" {
+		tmpDir = t
+	} else {
+		tmpDir = os.TempDir()
 	}
 
+	return filepath.Join(tmpDir, base), nil
+}
+
+func buildGOPATH(gopath string) error {
+	pkg := filepath.Join(gopath, "src/github.com/syncthing/syncthing")
+	dirs := []string{"cmd", "lib", "meta", "script", "test", "vendor"}
+
+	if debug {
+		t0 := time.Now()
+		log.Println("build temporary GOPATH in", gopath)
+		defer func() {
+			log.Println("... in", time.Since(t0))
+		}()
+	}
+
+	// Walk the sources and copy the files into the temporary GOPATH.
+	// Remember which files are supposed to be present so we can clean
+	// out everything else in the next step. The copyFile() step will
+	// only actually copy the file if it doesn't exist or the contents
+	// differ.
+
+	exists := map[string]struct{}{}
 	for _, dir := range dirs {
-		params = append(params, dir)
+		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			dst := filepath.Join(pkg, path)
+			exists[dst] = struct{}{}
+
+			if err := copyFile(path, dst, info.Mode()); err != nil {
+				return err
+			}
+
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 	}
 
-	bs, _ := runError("gometalinter", params...)
+	// Walk the temporary GOPATH and remove any files that we wouldn't
+	// have copied there in the previous step.
 
-	nerr := 0
-	for _, line := range strings.Split(string(bs), "\n") {
-		if line == "" {
-			continue
+	filepath.Walk(pkg, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
 		}
-		if strings.Contains(line, ".pb.go:") {
-			continue
+		if info.IsDir() {
+			return nil
 		}
-		log.Println(line)
-		nerr++
+		if _, ok := exists[path]; !ok {
+			os.Remove(path)
+		}
+		return nil
+	})
+
+	return nil
+}
+
+func gopath() string {
+	if gopath := os.Getenv("GOPATH"); gopath != "" {
+		// The env var is set, use that.
+		return gopath
 	}
 
-	return nerr == 0
+	// Ask Go what it thinks.
+	bs, err := runError("go", "env", "GOPATH")
+	if err != nil {
+		return ""
+	}
+
+	// We got something. Check if we are in fact available in that location.
+	gopath := string(bs)
+	if _, err := os.Stat(filepath.Join(gopath, "src/github.com/syncthing/syncthing/build.go")); err == nil {
+		// That seems to be the gopath.
+		return gopath
+	}
+
+	// The gopath is not valid.
+	return ""
+}
+
+func (t target) BinaryName() string {
+	if goos == "windows" {
+		return t.binaryName + ".exe"
+	}
+	return t.binaryName
 }

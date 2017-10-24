@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package versioner
 
@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/syncthing/syncthing/lib/fs"
 )
 
 func TestTrashcanCleanout(t *testing.T) {
@@ -49,7 +51,7 @@ func TestTrashcanCleanout(t *testing.T) {
 		}
 	}
 
-	versioner := NewTrashcan("default", "testdata", map[string]string{"cleanoutDays": "7"}).(*Trashcan)
+	versioner := NewTrashcan("default", fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata"), map[string]string{"cleanoutDays": "7"}).(*Trashcan)
 	if err := versioner.cleanoutArchive(); err != nil {
 		t.Fatal(err)
 	}

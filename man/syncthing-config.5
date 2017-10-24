@@ -1,6 +1,6 @@
 .\" Man page generated from reStructuredText.
 .
-.TH "SYNCTHING-CONFIG" "5" "November 21, 2016" "v0.14" "Syncthing"
+.TH "SYNCTHING-CONFIG" "5" "September 08, 2017" "v0.14" "Syncthing"
 .SH NAME
 syncthing-config \- Syncthing Configuration
 .
@@ -84,7 +84,7 @@ The following shows an example of the default configuration file (IDs will diffe
 <configuration version="14">
     <folder id="zj2AA\-q55a7" label="Default Folder (zj2AA\-q55a7)" path="/Users/jb/Sync/" type="readwrite" rescanIntervalS="60" ignorePerms="false" autoNormalize="true">
         <device id="3LT2GA5\-CQI4XJM\-WTZ264P\-MLOGMHL\-MCRLDNT\-MZV4RD3\-KA745CL\-OGAERQZ"></device>
-        <minDiskFreePct>1</minDiskFreePct>
+        <minDiskFree unit="%">1</minDiskFree>
         <versioning></versioning>
         <copiers>0</copiers>
         <pullers>0</pullers>
@@ -134,12 +134,12 @@ The following shows an example of the default configuration file (IDs will diffe
         <keepTemporariesH>24</keepTemporariesH>
         <cacheIgnoredFiles>false</cacheIgnoredFiles>
         <progressUpdateIntervalS>5</progressUpdateIntervalS>
-        <symlinksEnabled>true</symlinksEnabled>
         <limitBandwidthInLan>false</limitBandwidthInLan>
-        <minHomeDiskFreePct>1</minHomeDiskFreePct>
+        <minHomeDiskFree unit="%">1</minHomeDiskFree>
         <releasesURL>https://api.github.com/repos/syncthing/syncthing/releases?per_page=30</releasesURL>
         <overwriteRemoteDeviceNamesOnConnect>false</overwriteRemoteDeviceNamesOnConnect>
         <tempIndexMinBlocks>10</tempIndexMinBlocks>
+        <defaultFolderPath>~</defaultFolderPath>
     </options>
 </configuration>
 .ft P
@@ -163,7 +163,7 @@ migration from previous formats.
 .ft C
 <folder id="zj2AA\-q55a7" label="Default Folder (zj2AA\-q55a7)" path="/Users/jb/Sync/" type="readwrite" rescanIntervalS="60" ignorePerms="false" autoNormalize="true" ro="false">
     <device id="3LT2GA5\-CQI4XJM\-WTZ264P\-MLOGMHL\-MCRLDNT\-MZV4RD3\-KA745CL\-OGAERQZ" introducedBy="2CYF2WQ\-AKZO2QZ\-JAKWLYD\-AGHMQUM\-BGXUOIS\-GYILW34\-HJG3DUK\-LRRYQAR"></device>
-    <minDiskFreePct>1</minDiskFreePct>
+    <minDiskFree unit="%">1</minDiskFree>
     <versioning></versioning>
     <copiers>0</copiers>
     <pullers>0</pullers>
@@ -208,7 +208,7 @@ Controls how the folder is handled by Syncthing. Possible values are:
 The folder is in default mode. Sending local and accepting remote changes.
 .TP
 .B readonly
-The folder is in "master" mode \-\- it will not be modified by
+The folder is in "send\-only" mode \-\- it will not be modified by
 Syncthing on this device.
 .UNINDENT
 .TP
@@ -233,14 +233,14 @@ If the original introducer unshares this folder with this device, our device wil
 and unshare the folder (subject to skipIntroductionRemovals being false on the introducer device).
 All mentioned devices are those that will be sharing the folder in question.
 Each mentioned device must have a separate \fBdevice\fP element later in the file.
-It is customary that the local device ID is included in all repositories.
+It is customary that the local device ID is included in all folders.
 Syncthing will currently add this automatically if it is not present in
 the configuration file.
 .TP
-.B minDiskFreePct
-The percentage of space that should be available on the disk this folder
-resides. The folder will be stopped when the percentage of free space goes
-below the threshold. Set to zero to disable.
+.B minDiskFree
+The minimum required free space that should be available on the disk this folder
+resides. The folder will be stopped when the value drops below the threshold. Accepted units are
+\fB%\fP, \fBkB\fP, \fBMB\fP, \fBGB\fP and \fBTB\fP\&. Set to zero to disable.
 .TP
 .B versioning
 Specifies a versioning configuration.
@@ -306,12 +306,10 @@ sparse files will not be created.
 By default, devices exchange information about blocks available in
 transfers that are still in progress. When set to true, such information
 is not exchanged for this folder.
-.INDENT 7.0
 .TP
 .B fsync
 Transfer updated (from other devices) files to permanent storage before
 committing the changes to the internal database.
-.UNINDENT
 .UNINDENT
 .SH DEVICE ELEMENT
 .INDENT 0.0
@@ -365,6 +363,15 @@ Disable all compression.
 .B introducer
 Set to true if this device should be trusted as an introducer, i.e. we
 should copy their list of devices per folder when connecting.
+.UNINDENT
+.sp
+\fBSEE ALSO:\fP
+.INDENT 0.0
+.INDENT 3.5
+introducer
+.UNINDENT
+.UNINDENT
+.INDENT 0.0
 .TP
 .B skipIntroductionRemovals
 Set to true if you wish to follow only introductions and not de\-introductions.
@@ -511,12 +518,12 @@ If set, this is the API key that enables usage of the REST interface.
     <keepTemporariesH>24</keepTemporariesH>
     <cacheIgnoredFiles>false</cacheIgnoredFiles>
     <progressUpdateIntervalS>5</progressUpdateIntervalS>
-    <symlinksEnabled>true</symlinksEnabled>
     <limitBandwidthInLan>false</limitBandwidthInLan>
-    <minHomeDiskFreePct>1</minHomeDiskFreePct>
+    <minHomeDiskFree unit="%">1</minHomeDiskFree>
     <releasesURL>https://api.github.com/repos/syncthing/syncthing/releases?per_page=30</releasesURL>
     <overwriteRemoteDeviceNamesOnConnect>false</overwriteRemoteDeviceNamesOnConnect>
     <tempIndexMinBlocks>10</tempIndexMinBlocks>
+    <defaultFolderPath>~</defaultFolderPath>
 </options>
 .ft P
 .fi
@@ -633,9 +640,6 @@ ignores is usually not significant.
 How often in seconds the progress of ongoing downloads is made available to
 the GUI.
 .TP
-.B symlinksEnabled
-Whether to sync symlinks, if supported by the system.
-.TP
 .B limitBandwidthInLan
 Whether to apply bandwidth limits to devices in the same broadcast domain
 as the local device.
@@ -652,9 +656,10 @@ slow response time (slow connection/cpu) and large index exchanges.
 .B pingIdleTimeS
 Ping interval in seconds. Don\(aqt change it unless you feel it\(aqs necessary.
 .TP
-.B minHomeDiskFreePct
-The percentage of space that should be available on the partition holding
-the configuration and index.
+.B minHomeDiskFree
+The minimum required free space that should be available on the
+partition holding the configuration and index. Accepted units are \fB%\fP, \fBkB\fP,
+\fBMB\fP, \fBGB\fP and \fBTB\fP\&.
 .TP
 .B releasesURL
 The URL from which release information is loaded, for automatic upgrades.
@@ -667,11 +672,19 @@ announces will only be adopted when a name has not already been set.
 .B tempIndexMinBlocks
 When exchanging index information for incomplete transfers, only take
 into account files that have at least this many blocks.
+.TP
+.B defaultFolderPath
+The UI will propose to create new folders at this path. This can be disabled by
+setting this to an empty string.
 .UNINDENT
 .SS Listen Addresses
 .sp
 The following address types are accepted in sync protocol listen addresses:
 .INDENT 0.0
+.TP
+.B Default listen addresses (\fBdefault\fP)
+This is equivalent to \fBtcp://0.0.0.0:22000\fP and
+\fBdynamic+https://relays.syncthing.net/endpoint\fP\&.
 .TP
 .B TCP wildcard and port (\fBtcp://0.0.0.0:22000\fP, \fBtcp://:22000\fP)
 These are equivalent and will result in Syncthing listening on all
@@ -682,16 +695,16 @@ These are equivalent and will result in Syncthing listening on all
 interfaces via IPv4 only.
 .TP
 .B TCP IPv4 address and port (\fBtcp4://192.0.2.1:22000\fP)
-These are equivalent and will result in Syncthing listening on the
-specified address and port only.
+This results in Syncthing listening on the specified address and port, IPv4
+only.
 .TP
 .B TCP IPv6 wildcard and port (\fBtcp6://[::]:22000\fP, \fBtcp6://:22000\fP)
 These are equivalent and will result in Syncthing listening on all
 interfaces via IPv6 only.
 .TP
 .B TCP IPv6 address and port (\fBtcp6://[2001:db8::42]:22000\fP)
-These are equivalent and will result in Syncthing listening on the
-specified address and port only.
+This results in Syncthing listening on the specified address and port, IPv6
+only.
 .TP
 .B Static relay address (\fBrelay://192.0.2.42:22067?id=abcd123...\fP)
 Syncthing will connect to and listen for incoming connections via the
@@ -724,14 +737,14 @@ accidentally if you sync your home folder between devices. A common symptom
 of syncing configuration files is two devices ending up with the same Device ID.
 .sp
 If you want to use Syncthing to backup your configuration files, it is recommended
-that the files you are backing up are in a folder\-master to prevent other
+that the files you are backing up are in a folder\-sendonly to prevent other
 devices from overwriting the per device configuration. The folder on the remote
 device(s) should not be used as configuration for the remote devices.
 .sp
-If you\(aqd like to sync your home folder in non\-master mode, you may add the
+If you\(aqd like to sync your home folder in non\-send\-only mode, you may add the
 folder that stores the configuration files to the ignore list\&.
 If you\(aqd also like to backup your configuration files, add another folder in
-master mode for just the configuration folder.
+send\-only mode for just the configuration folder.
 .SH AUTHOR
 The Syncthing Authors
 .SH COPYRIGHT

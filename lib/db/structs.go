@@ -2,10 +2,10 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 //go:generate go run ../../script/protofmt.go structs.proto
-//go:generate protoc -I ../../../../../ -I ../../../../gogo/protobuf/protobuf -I . --gogofast_out=. structs.proto
+//go:generate protoc -I ../../../../../ -I ../../vendor/ -I ../../vendor/github.com/gogo/protobuf/protobuf -I . --gogofast_out=. structs.proto
 
 package db
 
@@ -35,7 +35,7 @@ func (f FileInfoTruncated) IsDirectory() bool {
 
 func (f FileInfoTruncated) IsSymlink() bool {
 	switch f.Type {
-	case protocol.FileInfoTypeSymlinkDirectory, protocol.FileInfoTypeSymlinkFile, protocol.FileInfoTypeSymlinkUnknown:
+	case protocol.FileInfoTypeSymlink, protocol.FileInfoTypeDeprecatedSymlinkDirectory, protocol.FileInfoTypeDeprecatedSymlinkFile:
 		return true
 	default:
 		return false
@@ -50,7 +50,7 @@ func (f FileInfoTruncated) FileSize() int64 {
 	if f.Deleted {
 		return 0
 	}
-	if f.IsDirectory() {
+	if f.IsDirectory() || f.IsSymlink() {
 		return protocol.SyntheticDirectorySize
 	}
 	return f.Size

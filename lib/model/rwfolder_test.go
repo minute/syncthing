@@ -2,30 +2,43 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package model
 
 import (
+	"context"
+	"crypto/rand"
+	"io"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/syncthing/syncthing/lib/db"
+	"github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/scanner"
 	"github.com/syncthing/syncthing/lib/sync"
 )
 
-func init() {
-	// We do this to make sure that the temp file required for the tests does
-	// not get removed during the tests.
+func TestMain(m *testing.M) {
+	// We do this to make sure that the temp file required for the tests
+	// does not get removed during the tests. Also set the prefix so it's
+	// found correctly regardless of platform.
+	if fs.TempPrefix != fs.WindowsTempPrefix {
+		originalPrefix := fs.TempPrefix
+		fs.TempPrefix = fs.WindowsTempPrefix
+		defer func() {
+			fs.TempPrefix = originalPrefix
+		}()
+	}
 	future := time.Now().Add(time.Hour)
-	err := os.Chtimes(filepath.Join("testdata", defTempNamer.TempName("file")), future, future)
+	err := os.Chtimes(filepath.Join("testdata", fs.TempName("file")), future, future)
 	if err != nil {
 		panic(err)
 	}
+	os.Exit(m.Run())
 }
 
 var blocks = []protocol.BlockInfo{
@@ -57,24 +70,32 @@ func setUpFile(filename string, blockNumbers []int) protocol.FileInfo {
 
 func setUpModel(file protocol.FileInfo) *Model {
 	db := db.OpenMemory()
-	model := NewModel(defaultConfig, protocol.LocalDeviceID, "device", "syncthing", "dev", db, nil)
+	model := NewModel(defaultConfig, protocol.LocalDeviceID, "syncthing", "dev", db, nil)
 	model.AddFolder(defaultFolderConfig)
 	// Update index
 	model.updateLocalsFromScanning("default", []protocol.FileInfo{file})
 	return model
 }
 
-func setUpRwFolder(model *Model) rwFolder {
-	return rwFolder{
+func setUpSendReceiveFolder(model *Model) *sendReceiveFolder {
+	f := &sendReceiveFolder{
 		folder: folder{
-			stateTracker: newStateTracker("default"),
-			model:        model,
+			stateTracker:        newStateTracker("default"),
+			model:               model,
+			initialScanFinished: make(chan struct{}),
+			ctx:                 context.TODO(),
 		},
-		dir:       "testdata",
+
+		fs:        fs.NewMtimeFS(fs.NewFilesystem(fs.FilesystemTypeBasic, "testdata"), db.NewNamespacedKV(model.db, "mtime")),
 		queue:     newJobQueue(),
 		errors:    make(map[string]string),
 		errorsMut: sync.NewMutex(),
 	}
+
+	// Folders are never actually started, so no initial scan will be done
+	close(f.initialScanFinished)
+
+	return f
 }
 
 // Layout of the files: (indexes from the above array)
@@ -93,7 +114,7 @@ func TestHandleFile(t *testing.T) {
 	requiredFile.Blocks = blocks[1:]
 
 	m := setUpModel(existingFile)
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 	copyChan := make(chan copyBlocksState, 1)
 
 	f.handleFile(requiredFile, copyChan, nil)
@@ -134,7 +155,7 @@ func TestHandleFileWithTemp(t *testing.T) {
 	requiredFile.Blocks = blocks[1:]
 
 	m := setUpModel(existingFile)
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 	copyChan := make(chan copyBlocksState, 1)
 
 	f.handleFile(requiredFile, copyChan, nil)
@@ -169,20 +190,20 @@ func TestCopierFinder(t *testing.T) {
 	// After dropping out blocks found locally:
 	// Pull: 1, 5, 6, 8
 
-	tempFile := filepath.Join("testdata", defTempNamer.TempName("file2"))
+	tempFile := filepath.Join("testdata", fs.TempName("file2"))
 	err := os.Remove(tempFile)
 	if err != nil && !os.IsNotExist(err) {
 		t.Error(err)
 	}
 
 	existingBlocks := []int{0, 2, 3, 4, 0, 0, 7, 0}
-	existingFile := setUpFile(defTempNamer.TempName("file"), existingBlocks)
+	existingFile := setUpFile(fs.TempName("file"), existingBlocks)
 	requiredFile := existingFile
 	requiredFile.Blocks = blocks[1:]
 	requiredFile.Name = "file2"
 
 	m := setUpModel(existingFile)
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 	copyChan := make(chan copyBlocksState)
 	pullChan := make(chan pullBlockState, 4)
 	finisherChan := make(chan *sharedPullerState, 1)
@@ -197,7 +218,7 @@ func TestCopierFinder(t *testing.T) {
 
 	select {
 	case <-pullChan:
-		t.Fatal("Finisher channel has data to be read")
+		t.Fatal("Pull channel has data to be read")
 	case <-finisherChan:
 		t.Fatal("Finisher channel has data to be read")
 	default:
@@ -223,7 +244,7 @@ func TestCopierFinder(t *testing.T) {
 	}
 
 	// Verify that the fetched blocks have actually been written to the temp file
-	blks, err := scanner.HashFile(tempFile, protocol.BlockSize, nil)
+	blks, err := scanner.HashFile(context.TODO(), fs.NewFilesystem(fs.FilesystemTypeBasic, "."), tempFile, protocol.BlockSize, nil, false)
 	if err != nil {
 		t.Log(err)
 	}
@@ -236,6 +257,133 @@ func TestCopierFinder(t *testing.T) {
 	finish.fd.Close()
 
 	os.Remove(tempFile)
+}
+
+func TestWeakHash(t *testing.T) {
+	tempFile := filepath.Join("testdata", fs.TempName("weakhash"))
+	var shift int64 = 10
+	var size int64 = 1 << 20
+	expectBlocks := int(size / protocol.BlockSize)
+	expectPulls := int(shift / protocol.BlockSize)
+	if shift > 0 {
+		expectPulls++
+	}
+
+	cleanup := func() {
+		for _, path := range []string{tempFile, "testdata/weakhash"} {
+			os.Remove(path)
+		}
+	}
+
+	cleanup()
+	defer cleanup()
+
+	f, err := os.Create("testdata/weakhash")
+	if err != nil {
+		t.Error(err)
+	}
+	defer f.Close()
+	_, err = io.CopyN(f, rand.Reader, size)
+	if err != nil {
+		t.Error(err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		t.Error(err)
+	}
+
+	// Create two files, second file has `shifted` bytes random prefix, yet
+	// both are of the same length, for example:
+	// File 1: abcdefgh
+	// File 2: xyabcdef
+	f.Seek(0, os.SEEK_SET)
+	existing, err := scanner.Blocks(context.TODO(), f, protocol.BlockSize, size, nil, true)
+	if err != nil {
+		t.Error(err)
+	}
+
+	f.Seek(0, os.SEEK_SET)
+	remainder := io.LimitReader(f, size-shift)
+	prefix := io.LimitReader(rand.Reader, shift)
+	nf := io.MultiReader(prefix, remainder)
+	desired, err := scanner.Blocks(context.TODO(), nf, protocol.BlockSize, size, nil, true)
+	if err != nil {
+		t.Error(err)
+	}
+
+	existingFile := protocol.FileInfo{
+		Name:       "weakhash",
+		Blocks:     existing,
+		Size:       size,
+		ModifiedS:  info.ModTime().Unix(),
+		ModifiedNs: int32(info.ModTime().Nanosecond()),
+	}
+	desiredFile := protocol.FileInfo{
+		Name:      "weakhash",
+		Size:      size,
+		Blocks:    desired,
+		ModifiedS: info.ModTime().Unix() + 1,
+	}
+
+	// Setup the model/pull environment
+	m := setUpModel(existingFile)
+	fo := setUpSendReceiveFolder(m)
+	copyChan := make(chan copyBlocksState)
+	pullChan := make(chan pullBlockState, expectBlocks)
+	finisherChan := make(chan *sharedPullerState, 1)
+
+	// Run a single fetcher routine
+	go fo.copierRoutine(copyChan, pullChan, finisherChan)
+
+	// Test 1 - no weak hashing, file gets fully repulled (`expectBlocks` pulls).
+	fo.WeakHashThresholdPct = 101
+	fo.handleFile(desiredFile, copyChan, finisherChan)
+
+	var pulls []pullBlockState
+	for len(pulls) < expectBlocks {
+		select {
+		case pull := <-pullChan:
+			pulls = append(pulls, pull)
+		case <-time.After(10 * time.Second):
+			t.Errorf("timed out, got %d pulls expected %d", len(pulls), expectPulls)
+		}
+	}
+	finish := <-finisherChan
+
+	select {
+	case <-pullChan:
+		t.Fatal("Pull channel has data to be read")
+	case <-finisherChan:
+		t.Fatal("Finisher channel has data to be read")
+	default:
+	}
+
+	finish.fd.Close()
+	if err := os.Remove(tempFile); err != nil && !os.IsNotExist(err) {
+		t.Error(err)
+	}
+
+	// Test 2 - using weak hash, expectPulls blocks pulled.
+	fo.WeakHashThresholdPct = -1
+	fo.handleFile(desiredFile, copyChan, finisherChan)
+
+	pulls = pulls[:0]
+	for len(pulls) < expectPulls {
+		select {
+		case pull := <-pullChan:
+			pulls = append(pulls, pull)
+		case <-time.After(10 * time.Second):
+			t.Errorf("timed out, got %d pulls expected %d", len(pulls), expectPulls)
+		}
+	}
+
+	finish = <-finisherChan
+	finish.fd.Close()
+
+	expectShifted := expectBlocks - expectPulls
+	if finish.copyOriginShifted != expectShifted {
+		t.Errorf("did not copy %d shifted", expectShifted)
+	}
 }
 
 // Test that updating a file removes it's old blocks from the blockmap
@@ -291,7 +439,7 @@ func TestLastResortPulling(t *testing.T) {
 		return true
 	}
 
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 
 	copyChan := make(chan copyBlocksState)
 	pullChan := make(chan pullBlockState, 1)
@@ -317,19 +465,19 @@ func TestLastResortPulling(t *testing.T) {
 	}
 
 	(<-finisherChan).fd.Close()
-	os.Remove(filepath.Join("testdata", defTempNamer.TempName("newfile")))
+	os.Remove(filepath.Join("testdata", fs.TempName("newfile")))
 }
 
 func TestDeregisterOnFailInCopy(t *testing.T) {
 	file := setUpFile("filex", []int{0, 2, 0, 0, 5, 0, 0, 8})
-	defer os.Remove("testdata/" + defTempNamer.TempName("filex"))
+	defer os.Remove("testdata/" + fs.TempName("filex"))
 
 	db := db.OpenMemory()
 
-	m := NewModel(defaultConfig, protocol.LocalDeviceID, "device", "syncthing", "dev", db, nil)
+	m := NewModel(defaultConfig, protocol.LocalDeviceID, "syncthing", "dev", db, nil)
 	m.AddFolder(defaultFolderConfig)
 
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 
 	// queue.Done should be called by the finisher routine
 	f.queue.Push("filex", 0, time.Time{})
@@ -396,13 +544,13 @@ func TestDeregisterOnFailInCopy(t *testing.T) {
 
 func TestDeregisterOnFailInPull(t *testing.T) {
 	file := setUpFile("filex", []int{0, 2, 0, 0, 5, 0, 0, 8})
-	defer os.Remove("testdata/" + defTempNamer.TempName("filex"))
+	defer os.Remove("testdata/" + fs.TempName("filex"))
 
 	db := db.OpenMemory()
-	m := NewModel(defaultConfig, protocol.LocalDeviceID, "device", "syncthing", "dev", db, nil)
+	m := NewModel(defaultConfig, protocol.LocalDeviceID, "syncthing", "dev", db, nil)
 	m.AddFolder(defaultFolderConfig)
 
-	f := setUpRwFolder(m)
+	f := setUpSendReceiveFolder(m)
 
 	// queue.Done should be called by the finisher routine
 	f.queue.Push("filex", 0, time.Time{})

@@ -2,16 +2,11 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package fs
 
-import (
-	"os"
-	"time"
-
-	"github.com/syncthing/syncthing/lib/osutil"
-)
+import "time"
 
 // The database is where we store the virtual mtimes
 type database interface {
@@ -20,29 +15,34 @@ type database interface {
 	Delete(key string)
 }
 
-// variable so that we can mock it for testing
-var osChtimes = os.Chtimes
-
 // The MtimeFS is a filesystem with nanosecond mtime precision, regardless
-// of what shenanigans the underlying filesystem gets up to.
+// of what shenanigans the underlying filesystem gets up to. A nil MtimeFS
+// just does the underlying operations with no additions.
 type MtimeFS struct {
-	db database
+	Filesystem
+	chtimes func(string, time.Time, time.Time) error
+	db      database
 }
 
-func NewMtimeFS(db database) *MtimeFS {
+func NewMtimeFS(underlying Filesystem, db database) *MtimeFS {
 	return &MtimeFS{
-		db: db,
+		Filesystem: underlying,
+		chtimes:    underlying.Chtimes, // for mocking it out in the tests
+		db:         db,
 	}
 }
 
 func (f *MtimeFS) Chtimes(name string, atime, mtime time.Time) error {
+	if f == nil {
+		return f.chtimes(name, atime, mtime)
+	}
+
 	// Do a normal Chtimes call, don't care if it succeeds or not.
-	osChtimes(name, atime, mtime)
+	f.chtimes(name, atime, mtime)
 
 	// Stat the file to see what happened. Here we *do* return an error,
-	// because it might be "does not exist" or similar. osutil.Lstat is the
-	// souped up version to account for Android breakage.
-	info, err := osutil.Lstat(name)
+	// because it might be "does not exist" or similar.
+	info, err := f.Filesystem.Lstat(name)
 	if err != nil {
 		return err
 	}
@@ -51,8 +51,8 @@ func (f *MtimeFS) Chtimes(name string, atime, mtime time.Time) error {
 	return nil
 }
 
-func (f *MtimeFS) Lstat(name string) (os.FileInfo, error) {
-	info, err := osutil.Lstat(name)
+func (f *MtimeFS) Lstat(name string) (FileInfo, error) {
+	info, err := f.Filesystem.Lstat(name)
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +104,7 @@ func (f *MtimeFS) load(name string) (real, virtual time.Time) {
 // The mtimeFileInfo is an os.FileInfo that lies about the ModTime().
 
 type mtimeFileInfo struct {
-	os.FileInfo
+	FileInfo
 	mtime time.Time
 }
 

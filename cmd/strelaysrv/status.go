@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"net/http/pprof"
 	"runtime"
 	"sync/atomic"
 	"time"
@@ -16,8 +17,19 @@ var rc *rateCalculator
 func statusService(addr string) {
 	rc = newRateCalculator(360, 10*time.Second, &bytesProxied)
 
-	http.HandleFunc("/status", getStatus)
-	if err := http.ListenAndServe(addr, nil); err != nil {
+	handler := http.NewServeMux()
+	handler.HandleFunc("/status", getStatus)
+	if pprofEnabled {
+		handler.HandleFunc("/debug/pprof/", pprof.Index)
+	}
+
+	srv := http.Server{
+		Addr:        addr,
+		Handler:     handler,
+		ReadTimeout: 15 * time.Second,
+	}
+	srv.SetKeepAlivesEnabled(false)
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }
@@ -42,7 +54,7 @@ func getStatus(w http.ResponseWriter, r *http.Request) {
 	status["goMaxProcs"] = runtime.GOMAXPROCS(-1)
 	status["goNumRoutine"] = runtime.NumGoroutine()
 	status["kbps10s1m5m15m30m60m"] = []int64{
-		rc.rate(10/10) * 8 / 1000,
+		rc.rate(1) * 8 / 1000, // each interval is 10s
 		rc.rate(60/10) * 8 / 1000,
 		rc.rate(5*60/10) * 8 / 1000,
 		rc.rate(15*60/10) * 8 / 1000,

@@ -2,7 +2,7 @@
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
-// You can obtain one at http://mozilla.org/MPL/2.0/.
+// You can obtain one at https://mozilla.org/MPL/2.0/.
 
 package db
 
@@ -69,13 +69,15 @@ func getFile(db dbReader, key []byte) (protocol.FileInfo, bool) {
 		return protocol.FileInfo{}, false
 	}
 	if err != nil {
-		panic(err)
+		l.Debugln("surprise error:", err)
+		return protocol.FileInfo{}, false
 	}
 
 	var f protocol.FileInfo
 	err = f.Unmarshal(bs)
 	if err != nil {
-		panic(err)
+		l.Debugln("unmarshal error:", err)
+		return protocol.FileInfo{}, false
 	}
 	return f, true
 }
