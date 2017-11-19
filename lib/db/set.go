@@ -16,7 +16,7 @@ import (
 	stdsync "sync"
 	"sync/atomic"
 
-	"github.com/syncthing/syncthing/lib/fs"
+	fs "github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
@@ -30,6 +30,7 @@ type FileSet struct {
 	blockmap   *BlockMap
 	localSize  sizeTracker
 	globalSize sizeTracker
+	foldCase   bool
 
 	remoteSequence map[protocol.DeviceID]int64 // Highest seen sequence numbers for other devices
 	updateMutex    sync.Mutex                  // protects remoteSequence and database updates
@@ -120,14 +121,26 @@ func (s *sizeTracker) Size() Counts {
 	return s.Counts
 }
 
-func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
-	var s = FileSet{
+type Option func(*FileSet)
+
+func WithCaseInsensitive(v bool) Option {
+	return func(s *FileSet) {
+		s.foldCase = v
+	}
+}
+
+func NewFileSet(folder string, fs fs.Filesystem, db *Instance, options ...Option) *FileSet {
+	var s = &FileSet{
 		remoteSequence: make(map[protocol.DeviceID]int64),
 		folder:         folder,
 		fs:             fs,
 		db:             db,
 		blockmap:       NewBlockMap(db, db.folderIdx.ID([]byte(folder))),
 		updateMutex:    sync.NewMutex(),
+	}
+
+	for _, fn := range options {
+		fn(s)
 	}
 
 	s.db.checkGlobals([]byte(folder), &s.globalSize)
@@ -147,7 +160,7 @@ func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
 	})
 	l.Debugf("loaded sequence for %q: %#v", folder, s.sequence)
 
-	return &s
+	return s
 }
 
 func (s *FileSet) Drop(device protocol.DeviceID) {
@@ -184,24 +197,28 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 	s.updateLocked(device, fs)
 }
 
-func (s *FileSet) updateLocked(device protocol.DeviceID, fs []protocol.FileInfo) {
+func (s *FileSet) updateLocked(device protocol.DeviceID, files []protocol.FileInfo) {
 	// names must be normalized and the lock held
 
 	if device == protocol.LocalDeviceID {
-		discards := make([]protocol.FileInfo, 0, len(fs))
-		updates := make([]protocol.FileInfo, 0, len(fs))
+		discards := make([]protocol.FileInfo, 0, len(files))
+		updates := make([]protocol.FileInfo, 0, len(files))
 		// db.UpdateFiles will sort unchanged files out -> save one db lookup
 		// filter slice according to https://github.com/golang/go/wiki/SliceTricks#filtering-without-allocating
-		oldFs := fs
-		fs = fs[:0]
+		oldFs := files
+		files = files[:0]
 		for _, nf := range oldFs {
-			ef, ok := s.db.getFile([]byte(s.folder), device[:], []byte(nf.Name))
+			name := []byte(nf.Name)
+			if s.foldCase {
+				name = []byte(fs.UnicodeLowercase(string(name)))
+			}
+			ef, ok := s.db.getFile([]byte(s.folder), device[:], name)
 			if ok && ef.Version.Equal(nf.Version) && ef.Invalid == nf.Invalid {
 				continue
 			}
 
 			nf.Sequence = atomic.AddInt64(&s.sequence, 1)
-			fs = append(fs, nf)
+			files = append(files, nf)
 
 			if ok {
 				discards = append(discards, ef)
@@ -211,9 +228,9 @@ func (s *FileSet) updateLocked(device protocol.DeviceID, fs []protocol.FileInfo)
 		s.blockmap.Discard(discards)
 		s.blockmap.Update(updates)
 	} else {
-		s.remoteSequence[device] = maxSequence(fs)
+		s.remoteSequence[device] = maxSequence(files)
 	}
-	s.db.updateFiles([]byte(s.folder), device[:], fs, &s.localSize, &s.globalSize)
+	s.db.updateFiles([]byte(s.folder), device[:], files, &s.localSize, &s.globalSize, s.foldCase)
 }
 
 func (s *FileSet) WithNeed(device protocol.DeviceID, fn Iterator) {
@@ -249,6 +266,9 @@ func (s *FileSet) WithHaveTruncated(device protocol.DeviceID, fn Iterator) {
 }
 
 func (s *FileSet) WithPrefixedHaveTruncated(device protocol.DeviceID, prefix string, fn Iterator) {
+	if s.foldCase {
+		prefix = fs.UnicodeLowercase(prefix)
+	}
 	l.Debugf("%s WithPrefixedHaveTruncated(%v)", s.folder, device)
 	s.db.withHave([]byte(s.folder), device[:], []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
 }
@@ -263,17 +283,26 @@ func (s *FileSet) WithGlobalTruncated(fn Iterator) {
 }
 
 func (s *FileSet) WithPrefixedGlobalTruncated(prefix string, fn Iterator) {
+	if s.foldCase {
+		prefix = fs.UnicodeLowercase(prefix)
+	}
 	l.Debugf("%s WithPrefixedGlobalTruncated()", s.folder, prefix)
 	s.db.withGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
 }
 
 func (s *FileSet) Get(device protocol.DeviceID, file string) (protocol.FileInfo, bool) {
+	if s.foldCase {
+		file = fs.UnicodeLowercase(file)
+	}
 	f, ok := s.db.getFile([]byte(s.folder), device[:], []byte(osutil.NormalizedFilename(file)))
 	f.Name = osutil.NativeFilename(f.Name)
 	return f, ok
 }
 
 func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
+	if s.foldCase {
+		file = fs.UnicodeLowercase(file)
+	}
 	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), false)
 	if !ok {
 		return protocol.FileInfo{}, false
@@ -284,6 +313,9 @@ func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
 }
 
 func (s *FileSet) GetGlobalTruncated(file string) (FileInfoTruncated, bool) {
+	if s.foldCase {
+		file = fs.UnicodeLowercase(file)
+	}
 	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), true)
 	if !ok {
 		return FileInfoTruncated{}, false
@@ -294,6 +326,9 @@ func (s *FileSet) GetGlobalTruncated(file string) (FileInfoTruncated, bool) {
 }
 
 func (s *FileSet) Availability(file string) []protocol.DeviceID {
+	if s.foldCase {
+		file = fs.UnicodeLowercase(file)
+	}
 	return s.db.availability([]byte(s.folder), []byte(osutil.NormalizedFilename(file)))
 }
 

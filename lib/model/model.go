@@ -320,7 +320,7 @@ func (m *Model) AddFolder(cfg config.FolderConfiguration) {
 func (m *Model) addFolderLocked(cfg config.FolderConfiguration) {
 	m.folderCfgs[cfg.ID] = cfg
 	folderFs := cfg.Filesystem()
-	m.folderFiles[cfg.ID] = db.NewFileSet(cfg.ID, folderFs, m.db)
+	m.folderFiles[cfg.ID] = db.NewFileSet(cfg.ID, folderFs, m.db, db.WithCaseInsensitive(cfg.CaseInsensitive))
 
 	for _, device := range cfg.Devices {
 		m.folderDevices.set(device.DeviceID, cfg.ID)

@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	filesystem "github.com/syncthing/syncthing/lib/fs"
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/syndtr/goleveldb/leveldb"
@@ -93,14 +94,18 @@ func (db *Instance) Location() string {
 	return db.location
 }
 
-func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, localSize, globalSize *sizeTracker) {
+func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, localSize, globalSize *sizeTracker, foldCase bool) {
 	t := db.newReadWriteTransaction()
 	defer t.close()
 
 	var fk []byte
 	isLocalDevice := bytes.Equal(device, protocol.LocalDeviceID[:])
 	for _, f := range fs {
-		name := []byte(f.Name)
+		nameStr := f.Name
+		if foldCase {
+			nameStr = filesystem.UnicodeLowercase(nameStr)
+		}
+		name := []byte(nameStr)
 		fk = db.deviceKeyInto(fk[:cap(fk)], folder, device, name)
 
 		// Get and unmarshal the file entry. If it doesn't exist or can't be
