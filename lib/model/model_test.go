@@ -1102,7 +1102,7 @@ func TestROScanRecovery(t *testing.T) {
 	ldb := db.OpenMemory()
 	set := db.NewFileSet("default", defaultFs, ldb)
 	set.Update(protocol.LocalDeviceID, []protocol.FileInfo{
-		{Name: "dummyfile"},
+		{Name: "dummyfile", Version: protocol.Vector{Counters: []protocol.Counter{{ID: 42, Value: 1}}}},
 	})
 
 	fcfg := config.FolderConfiguration{
@@ -1190,7 +1190,7 @@ func TestRWScanRecovery(t *testing.T) {
 	ldb := db.OpenMemory()
 	set := db.NewFileSet("default", defaultFs, ldb)
 	set.Update(protocol.LocalDeviceID, []protocol.FileInfo{
-		{Name: "dummyfile"},
+		{Name: "dummyfile", Version: protocol.Vector{Counters: []protocol.Counter{{ID: 42, Value: 1}}}},
 	})
 
 	fcfg := config.FolderConfiguration{
