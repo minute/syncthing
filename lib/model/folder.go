@@ -40,11 +40,16 @@ type folder struct {
 	watchErr         error
 	watchErrMut      sync.Mutex
 
-	puller puller
+	puller   puller
+	filterer filterer
 }
 
 type puller interface {
 	pull() bool // true when successfull and should not be retried
+}
+
+type filterer interface {
+	filter([]protocol.FileInfo) []protocol.FileInfo
 }
 
 func newFolder(model *Model, cfg config.FolderConfiguration) folder {
@@ -67,6 +72,8 @@ func newFolder(model *Model, cfg config.FolderConfiguration) folder {
 		watchCancel: func() {},
 		watchErr:    errWatchNotStarted,
 		watchErrMut: sync.NewMutex(),
+
+		filterer: noopFilterer{},
 	}
 }
 
@@ -217,7 +224,7 @@ func (f *folder) getHealthError() error {
 }
 
 func (f *folder) scanSubdirs(subDirs []string) error {
-	if err := f.model.internalScanFolderSubdirs(f.ctx, f.folderID, subDirs); err != nil {
+	if err := f.model.internalScanFolderSubdirs(f.ctx, f.folderID, subDirs, f.filterer); err != nil {
 		// Potentially sets the error twice, once in the scanner just
 		// by doing a check, and once here, if the error returned is
 		// the same one as returned by CheckHealth, though
@@ -353,4 +360,10 @@ func (f *folder) basePause() time.Duration {
 		return defaultPullerPause
 	}
 	return time.Duration(f.PullerPauseS) * time.Second
+}
+
+type noopFilterer struct{}
+
+func (noopFilterer) filter(fs []protocol.FileInfo) []protocol.FileInfo {
+	return fs
 }

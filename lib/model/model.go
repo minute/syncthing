@@ -1969,7 +1969,7 @@ func (m *Model) ScanFolderSubdirs(folder string, subs []string) error {
 	return runner.Scan(subs)
 }
 
-func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, subDirs []string) error {
+func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, subDirs []string, filterer filterer) error {
 	m.fmut.RLock()
 	if err := m.checkFolderRunningLocked(folder); err != nil {
 		m.fmut.RUnlock()
@@ -2063,7 +2063,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 				l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 				return err
 			}
-			m.updateLocalsFromScanning(folder, batch)
+			m.updateLocalsFromScanning(folder, filterer.filter(batch))
 			batch = batch[:0]
 			batchSizeBytes = 0
 		}
@@ -2077,7 +2077,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 		l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 		return err
 	} else if len(batch) > 0 {
-		m.updateLocalsFromScanning(folder, batch)
+		m.updateLocalsFromScanning(folder, filterer.filter(batch))
 	}
 
 	if len(subDirs) == 0 {
@@ -2100,7 +2100,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 					iterError = err
 					return false
 				}
-				m.updateLocalsFromScanning(folder, batch)
+				m.updateLocalsFromScanning(folder, filterer.filter(batch))
 				batch = batch[:0]
 				batchSizeBytes = 0
 			}
@@ -2162,7 +2162,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 		l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 		return err
 	} else if len(batch) > 0 {
-		m.updateLocalsFromScanning(folder, batch)
+		m.updateLocalsFromScanning(folder, filterer.filter(batch))
 	}
 
 	m.folderStatRef(folder).ScanCompleted()
