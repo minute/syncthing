@@ -87,7 +87,7 @@ func (m *metadataTracker) countsPtr(dev protocol.DeviceID) *Counts {
 // addFile adds a file to the counts, adjusting the sequence number as
 // appropriate
 func (m *metadataTracker) addFile(dev protocol.DeviceID, f FileIntf) {
-	if f.IsInvalid() {
+	if f.IsIgnored() || f.IsUnsupported() || f.MustRescan() {
 		return
 	}
 
@@ -115,7 +115,7 @@ func (m *metadataTracker) addFile(dev protocol.DeviceID, f FileIntf) {
 
 // removeFile removes a file from the counts
 func (m *metadataTracker) removeFile(dev protocol.DeviceID, f FileIntf) {
-	if f.IsInvalid() {
+	if f.IsIgnored() || f.IsUnsupported() || f.MustRescan() {
 		return
 	}
 

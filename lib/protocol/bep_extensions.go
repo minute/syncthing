@@ -49,12 +49,20 @@ func (f FileInfo) IsInvalid() bool {
 	return f.Invalid || f.LocalFlags&LocalInvalidFlags != 0
 }
 
+func (f FileInfo) IsUnsupported() bool {
+	return f.LocalFlags&FlagLocalUnsupported != 0
+}
+
 func (f FileInfo) IsIgnored() bool {
 	return f.LocalFlags&FlagLocalIgnored != 0
 }
 
 func (f FileInfo) MustRescan() bool {
 	return f.LocalFlags&FlagLocalMustRescan != 0
+}
+
+func (f FileInfo) IsReceiveOnlyChanged() bool {
+	return f.LocalFlags&FlagLocalReceiveOnly != 0
 }
 
 func (f FileInfo) IsDirectory() bool {
@@ -152,7 +160,7 @@ func (f FileInfo) IsEmpty() bool {
 // A symlink is not "equivalent", if it has different
 //  - target
 // A directory does not have anything specific to check.
-func (f FileInfo) IsEquivalent(other FileInfo, ignorePerms bool, ignoreBlocks bool) bool {
+func (f FileInfo) IsEquivalent(other FileInfo, ignorePerms bool, ignoreBlocks bool, ignoreFlags uint32) bool {
 	if f.MustRescan() || other.MustRescan() {
 		// These are per definition not equivalent because they don't
 		// represent a valid state, even if both happen to have the
@@ -160,7 +168,10 @@ func (f FileInfo) IsEquivalent(other FileInfo, ignorePerms bool, ignoreBlocks bo
 		return false
 	}
 
-	if f.Name != other.Name || f.Type != other.Type || f.Deleted != other.Deleted || f.Invalid != other.Invalid || f.LocalFlags != other.LocalFlags {
+	if f.Name != other.Name || f.Type != other.Type || f.Deleted != other.Deleted || f.Invalid != other.Invalid {
+		return false
+	}
+	if f.LocalFlags&^ignoreFlags != other.LocalFlags&^ignoreFlags {
 		return false
 	}
 

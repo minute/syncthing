@@ -39,6 +39,9 @@ type FileIntf interface {
 	FileName() string
 	IsDeleted() bool
 	IsInvalid() bool
+	IsIgnored() bool
+	IsUnsupported() bool
+	MustRescan() bool
 	IsDirectory() bool
 	IsSymlink() bool
 	HasPermissionBits() bool

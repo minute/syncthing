@@ -29,8 +29,20 @@ func (f FileInfoTruncated) IsInvalid() bool {
 	return f.Invalid || f.LocalFlags&protocol.LocalInvalidFlags != 0
 }
 
+func (f FileInfoTruncated) IsUnsupported() bool {
+	return f.LocalFlags&protocol.FlagLocalUnsupported != 0
+}
+
 func (f FileInfoTruncated) IsIgnored() bool {
 	return f.LocalFlags&protocol.FlagLocalIgnored != 0
+}
+
+func (f FileInfoTruncated) MustRescan() bool {
+	return f.LocalFlags&protocol.FlagLocalMustRescan != 0
+}
+
+func (f FileInfoTruncated) IsReceiveOnlyChanged() bool {
+	return f.LocalFlags&protocol.FlagLocalReceiveOnly != 0
 }
 
 func (f FileInfoTruncated) IsDirectory() bool {

@@ -1776,6 +1776,12 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 
 		// Mark the file as invalid if any of the local bad stuff flags are set.
 		f.Invalid = f.IsInvalid()
+		// If the file is marked LocalReceive (i.e., changed locally on a
+		// receive only folder) we do not want it to ever become the
+		// globally best version, invalid or not.
+		if f.IsReceiveOnlyChanged() {
+			f.Version = protocol.Vector{}
+		}
 		f.LocalFlags = 0 // never sent externally
 
 		if dropSymlinks && f.IsSymlink() {
@@ -1969,7 +1975,7 @@ func (m *Model) ScanFolderSubdirs(folder string, subs []string) error {
 	return runner.Scan(subs)
 }
 
-func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, subDirs []string, filterer filterer) error {
+func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, subDirs []string, localFlags uint32) error {
 	m.fmut.RLock()
 	if err := m.checkFolderRunningLocked(folder); err != nil {
 		m.fmut.RUnlock()
@@ -2039,6 +2045,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 		ShortID:               m.shortID,
 		ProgressTickIntervalS: folderCfg.ScanProgressIntervalS,
 		UseLargeBlocks:        folderCfg.UseLargeBlocks,
+		LocalFlags:            localFlags,
 	})
 
 	if err := runner.CheckHealth(); err != nil {
@@ -2063,7 +2070,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 				l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 				return err
 			}
-			m.updateLocalsFromScanning(folder, filterer.filter(batch))
+			m.updateLocalsFromScanning(folder, batch)
 			batch = batch[:0]
 			batchSizeBytes = 0
 		}
@@ -2077,7 +2084,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 		l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 		return err
 	} else if len(batch) > 0 {
-		m.updateLocalsFromScanning(folder, filterer.filter(batch))
+		m.updateLocalsFromScanning(folder, batch)
 	}
 
 	if len(subDirs) == 0 {
@@ -2100,7 +2107,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 					iterError = err
 					return false
 				}
-				m.updateLocalsFromScanning(folder, filterer.filter(batch))
+				m.updateLocalsFromScanning(folder, batch)
 				batch = batch[:0]
 				batchSizeBytes = 0
 			}
@@ -2162,7 +2169,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 		l.Debugln("Stopping scan of folder %s due to: %s", folderCfg.Description(), err)
 		return err
 	} else if len(batch) > 0 {
-		m.updateLocalsFromScanning(folder, filterer.filter(batch))
+		m.updateLocalsFromScanning(folder, batch)
 	}
 
 	m.folderStatRef(folder).ScanCompleted()

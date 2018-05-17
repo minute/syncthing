@@ -274,9 +274,9 @@
               <div class="panel-progress" ng-show="folderStatus(folder) == 'scanning' && scanProgress[folder.id] != undefined" ng-attr-style="width: {{scanPercentage(folder.id)}}%"></div>
               <h4 class="panel-title">
                 <div class="panel-icon hidden-xs">
-                  <span ng-if="folder.type == 'sendrecv'" class="fa fa-fw fa-folder"></span>
-                  <span ng-if="folder.type == 'sendonly'" class="fa fa-fw fa-lock"></span>
-                  <span ng-if="folder.type == 'receiveonly'" class="fa fa-fw fa-arrow-alt-circle-down"></span>
+                  <span ng-if="folder.type == 'sendreceive'" class="fa fa-fw fa-folder"></span>
+                  <span ng-if="folder.type == 'sendonly'" class="fa fa-fw fa-arrow-circle-up"></span>
+                  <span ng-if="folder.type == 'receiveonly'" class="fa fa-fw fa-arrow-circle-down"></span>
                 </div>
                 <div class="panel-status pull-right text-{{folderClass(folder)}}" ng-switch="folderStatus(folder)">
                   <span ng-switch-when="paused"><span class="hidden-xs" translate>Paused</span><span class="visible-xs">&#9724;</span></span>

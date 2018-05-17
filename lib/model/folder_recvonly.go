@@ -19,22 +19,10 @@ type receiveOnlyFolder struct {
 
 func newReceiveOnlyFolder(model *Model, cfg config.FolderConfiguration, ver versioner.Versioner, fs fs.Filesystem) service {
 	sr := newSendReceiveFolder(model, cfg, ver, fs).(*sendReceiveFolder)
-
-	f := receiveOnlyFolder{sr}
-	f.folder.filterer = receiveOnlyFilter{}
-
-	return f
+	sr.localFlags = protocol.FlagLocalReceiveOnly
+	return receiveOnlyFolder{sr}
 }
 
 func (f *receiveOnlyFolder) String() string {
 	return fmt.Sprintf("receiveOnlyFolder/%s@%p", f.folderID, f)
-}
-
-type receiveOnlyFilter struct{}
-
-func (receiveOnlyFilter) filter(fs []protocol.FileInfo) []protocol.FileInfo {
-	for i := range fs {
-		fs[i].LocalFlags = protocol.FlagLocalReceiveOnly
-	}
-	return fs
 }
