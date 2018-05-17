@@ -94,9 +94,10 @@ const (
 	FlagLocalUnsupported = 1 << 0 // The kind is unsupported, e.g. symlinks on Windows
 	FlagLocalIgnored     = 1 << 1 // Matches local ignore patterns
 	FlagLocalMustRescan  = 1 << 2 // Doesn't match content on disk, must be rechecked fully
+	FlagLocalReceiveOnly = 1 << 3 // Change detected on receive only folder
 
 	// Flags that should result in the Invalid bit on outgoing updates
-	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan
+	LocalInvalidFlags = FlagLocalUnsupported | FlagLocalIgnored | FlagLocalMustRescan | FlagLocalReceiveOnly
 )
 
 var (
