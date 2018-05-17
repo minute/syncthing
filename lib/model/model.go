@@ -2142,6 +2142,7 @@ func (m *Model) internalScanFolderSubdirs(ctx context.Context, folder string, su
 					ModifiedBy: m.id.Short(),
 					Deleted:    true,
 					Version:    f.Version.Update(m.shortID),
+					LocalFlags: localFlags,
 				}
 				// We do not want to override the global version
 				// with the deleted file. Keeping only our local
