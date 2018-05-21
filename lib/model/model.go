@@ -56,6 +56,7 @@ const (
 
 type service interface {
 	BringToFront(string)
+	Override(*db.FileSet)
 	DelayScan(d time.Duration)
 	IgnoresUpdated()            // ignore matcher was updated notification
 	SchedulePull()              // something relevant changed, we should try a pull
@@ -2318,50 +2319,14 @@ func (m *Model) WatchError(folder string) error {
 
 func (m *Model) Override(folder string) {
 	m.fmut.RLock()
-	fs, ok := m.folderFiles[folder]
-	runner := m.folderRunners[folder]
+	fs, fsOK := m.folderFiles[folder]
+	runner, runnerOK := m.folderRunners[folder]
 	m.fmut.RUnlock()
-	if !ok {
+	if !fsOK || !runnerOK {
 		return
 	}
 
-	runner.setState(FolderScanning)
-	batch := make([]protocol.FileInfo, 0, maxBatchSizeFiles)
-	batchSizeBytes := 0
-	fs.WithNeed(protocol.LocalDeviceID, func(fi db.FileIntf) bool {
-		need := fi.(protocol.FileInfo)
-		if len(batch) == maxBatchSizeFiles || batchSizeBytes > maxBatchSizeBytes {
-			m.updateLocalsFromScanning(folder, batch)
-			batch = batch[:0]
-			batchSizeBytes = 0
-		}
-
-		have, ok := fs.Get(protocol.LocalDeviceID, need.Name)
-		// Don't override files that are in a bad state (ignored,
-		// unsupported, must rescan, ...).
-		if ok && have.IsInvalid() {
-			return true
-		}
-		if !ok || have.Name != need.Name {
-			// We are missing the file
-			need.Deleted = true
-			need.Blocks = nil
-			need.Version = need.Version.Update(m.shortID)
-			need.Size = 0
-		} else {
-			// We have the file, replace with our version
-			have.Version = have.Version.Merge(need.Version).Update(m.shortID)
-			need = have
-		}
-		need.Sequence = 0
-		batch = append(batch, need)
-		batchSizeBytes += need.ProtoSize()
-		return true
-	})
-	if len(batch) > 0 {
-		m.updateLocalsFromScanning(folder, batch)
-	}
-	runner.setState(FolderIdle)
+	runner.Override(fs)
 }
 
 // CurrentSequence returns the change version for the given folder.
