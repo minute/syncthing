@@ -19,7 +19,7 @@ import (
 	"github.com/syncthing/syncthing/lib/watchaggregator"
 )
 
-var errWatchNotStarted error = errors.New("not started")
+var errWatchNotStarted = errors.New("not started")
 
 type folder struct {
 	stateTracker
