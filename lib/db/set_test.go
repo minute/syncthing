@@ -906,7 +906,7 @@ func TestWithHaveSequence(t *testing.T) {
 
 	i := 2
 	s.WithHaveSequence(int64(i), func(fi db.FileIntf) bool {
-		if f := fi.(protocol.FileInfo); !f.IsEquivalent(localHave[i-1], false, false) {
+		if f := fi.(protocol.FileInfo); !f.IsEquivalent(localHave[i-1], false, false, 0) {
 			t.Fatalf("Got %v\nExpected %v", f, localHave[i-1])
 		}
 		i++
