@@ -175,6 +175,8 @@ func (f *folder) BringToFront(string) {}
 
 func (f *folder) Override(fs *db.FileSet, updateFn func([]protocol.FileInfo)) {}
 
+func (f *folder) Revert(fs *db.FileSet, updateFn func([]protocol.FileInfo)) {}
+
 func (f *folder) DelayScan(next time.Duration) {
 	f.Delay(next)
 }

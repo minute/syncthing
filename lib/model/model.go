@@ -57,6 +57,7 @@ const (
 type service interface {
 	BringToFront(string)
 	Override(*db.FileSet, func([]protocol.FileInfo))
+	Revert(*db.FileSet, func([]protocol.FileInfo))
 	DelayScan(d time.Duration)
 	IgnoresUpdated()            // ignore matcher was updated notification
 	SchedulePull()              // something relevant changed, we should try a pull
@@ -2331,6 +2332,24 @@ func (m *Model) Override(folder string) {
 	// Run the override, taking updates as if they came from scanning.
 
 	runner.Override(fs, func(files []protocol.FileInfo) {
+		m.updateLocalsFromScanning(folder, files)
+	})
+}
+
+func (m *Model) Revert(folder string) {
+	// Grab the runner and the file set.
+
+	m.fmut.RLock()
+	fs, fsOK := m.folderFiles[folder]
+	runner, runnerOK := m.folderRunners[folder]
+	m.fmut.RUnlock()
+	if !fsOK || !runnerOK {
+		return
+	}
+
+	// Run the revert, taking updates as if they came from scanning.
+
+	runner.Revert(fs, func(files []protocol.FileInfo) {
 		m.updateLocalsFromScanning(folder, files)
 	})
 }
