@@ -36,11 +36,18 @@ func (f *receiveOnlyFolder) Revert(fs *db.FileSet, updateFn func([]protocol.File
 	batchSizeBytes := 0
 	fs.WithHave(protocol.LocalDeviceID, func(intf db.FileIntf) bool {
 		fi := intf.(protocol.FileInfo)
+		if !fi.IsReceiveOnlyChanged() {
+			// We're only interested in files that have changed locally in
+			// receive only mode.
+			return true
+		}
 
-		// Incrementing our version and resetting the others to zero ensures
-		// we are in conflict with any remote change. The next pull will
-		// move our conflicting changes out of the way and grab the latest
-		// from the cluster.
+		// Incrementing our version counter and resetting the others to zero
+		// ensures we are in conflict with any remote change. The next pull
+		// will move our conflicting changes out of the way and grab the
+		// latest from the cluster. Our version having the receive only bit
+		// makes it look invalid and ensures it will lose the conflict
+		// resolution.
 		fi.Version = fi.Version.Update(f.shortID).DropOthers(f.shortID)
 		batch = append(batch, fi)
 		batchSizeBytes += fi.ProtoSize()
@@ -48,6 +55,7 @@ func (f *receiveOnlyFolder) Revert(fs *db.FileSet, updateFn func([]protocol.File
 		if len(batch) >= maxBatchSizeFiles || batchSizeBytes >= maxBatchSizeBytes {
 			updateFn(batch)
 			batch = batch[:0]
+			batchSizeBytes = 0
 		}
 		return true
 	})
