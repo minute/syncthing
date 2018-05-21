@@ -101,14 +101,14 @@ func (f *sendOnlyFolder) pull() bool {
 	return true
 }
 
-func (f *sendOnlyFolder) Override(fs *db.FileSet) {
+func (f *sendOnlyFolder) Override(fs *db.FileSet, updateFn func([]protocol.FileInfo)) {
 	f.setState(FolderScanning)
 	batch := make([]protocol.FileInfo, 0, maxBatchSizeFiles)
 	batchSizeBytes := 0
 	fs.WithNeed(protocol.LocalDeviceID, func(fi db.FileIntf) bool {
 		need := fi.(protocol.FileInfo)
 		if len(batch) == maxBatchSizeFiles || batchSizeBytes > maxBatchSizeBytes {
-			f.model.updateLocalsFromScanning(f.folderID, batch)
+			updateFn(batch)
 			batch = batch[:0]
 			batchSizeBytes = 0
 		}
@@ -136,7 +136,7 @@ func (f *sendOnlyFolder) Override(fs *db.FileSet) {
 		return true
 	})
 	if len(batch) > 0 {
-		f.model.updateLocalsFromScanning(f.folderID, batch)
+		updateFn(batch)
 	}
 	f.setState(FolderIdle)
 }
