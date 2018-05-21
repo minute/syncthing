@@ -391,9 +391,3 @@ func (f *folder) basePause() time.Duration {
 	}
 	return time.Duration(f.PullerPauseS) * time.Second
 }
-
-type noopFilterer struct{}
-
-func (noopFilterer) filter(fs []protocol.FileInfo) []protocol.FileInfo {
-	return fs
-}
