@@ -103,6 +103,10 @@ func (f FileInfo) FileName() string {
 	return f.Name
 }
 
+func (f FileInfo) FileLocalFlags() uint32 {
+	return f.LocalFlags
+}
+
 func (f FileInfo) ModTime() time.Time {
 	return time.Unix(f.ModifiedS, int64(f.ModifiedNs))
 }

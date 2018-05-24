@@ -37,6 +37,7 @@ type FileSet struct {
 type FileIntf interface {
 	FileSize() int64
 	FileName() string
+	FileLocalFlags() uint32
 	IsDeleted() bool
 	IsInvalid() bool
 	IsIgnored() bool
@@ -250,15 +251,15 @@ func (s *FileSet) Availability(file string) []protocol.DeviceID {
 }
 
 func (s *FileSet) Sequence(device protocol.DeviceID) int64 {
-	return s.meta.Counts(device).Sequence
+	return s.meta.Counts(device, 0).Sequence
 }
 
 func (s *FileSet) LocalSize() Counts {
-	return s.meta.Counts(protocol.LocalDeviceID)
+	return s.meta.Counts(protocol.LocalDeviceID, 0)
 }
 
 func (s *FileSet) GlobalSize() Counts {
-	return s.meta.Counts(globalDeviceID)
+	return s.meta.Counts(globalDeviceID, 0)
 }
 
 func (s *FileSet) IndexID(device protocol.DeviceID) protocol.IndexID {

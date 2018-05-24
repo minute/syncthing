@@ -1,8 +1,6 @@
 package model
 
 import (
-	"fmt"
-
 	"github.com/syncthing/syncthing/lib/config"
 	"github.com/syncthing/syncthing/lib/db"
 	"github.com/syncthing/syncthing/lib/fs"
@@ -24,10 +22,6 @@ func newReceiveOnlyFolder(model *Model, cfg config.FolderConfiguration, ver vers
 	return &receiveOnlyFolder{sr}
 }
 
-func (f *receiveOnlyFolder) String() string {
-	return fmt.Sprintf("receiveOnlyFolder/%s@%p", f.folderID, f)
-}
-
 func (f *receiveOnlyFolder) Revert(fs *db.FileSet, updateFn func([]protocol.FileInfo)) {
 	f.setState(FolderScanning)
 	defer f.setState(FolderIdle)
@@ -42,13 +36,14 @@ func (f *receiveOnlyFolder) Revert(fs *db.FileSet, updateFn func([]protocol.File
 			return true
 		}
 
-		// Incrementing our version counter and resetting the others to zero
-		// ensures we are in conflict with any remote change. The next pull
-		// will move our conflicting changes out of the way and grab the
-		// latest from the cluster. Our version having the receive only bit
-		// makes it look invalid and ensures it will lose the conflict
-		// resolution.
-		fi.Version = fi.Version.Update(f.shortID).DropOthers(f.shortID)
+		// Revert means to throw away our local changes. We reset the
+		// version to the empty vector, which is strictly older than any
+		// other existing version. It is not in conflict with anything,
+		// either, so we will not create a conflict copy of our local
+		// changes.
+		fi.Version = protocol.Vector{}
+		fi.LocalFlags &^= protocol.FlagLocalReceiveOnly
+
 		batch = append(batch, fi)
 		batchSizeBytes += fi.ProtoSize()
 

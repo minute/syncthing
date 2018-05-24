@@ -83,6 +83,10 @@ func (f FileInfoTruncated) FileName() string {
 	return f.Name
 }
 
+func (f FileInfoTruncated) FileLocalFlags() uint32 {
+	return f.LocalFlags
+}
+
 func (f FileInfoTruncated) ModTime() time.Time {
 	return time.Unix(f.ModifiedS, int64(f.ModifiedNs))
 }
