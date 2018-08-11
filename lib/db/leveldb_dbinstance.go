@@ -16,6 +16,7 @@ import (
 	"sync/atomic"
 
 	"github.com/syncthing/syncthing/lib/protocol"
+	"github.com/syncthing/syncthing/lib/sha256"
 	"github.com/syncthing/syncthing/lib/sync"
 	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/errors"
@@ -281,6 +282,15 @@ func (db *Instance) getFileTrunc(key []byte, trunc bool) (FileIntf, bool) {
 	if err != nil {
 		l.Debugln("surprise error:", err)
 		return nil, false
+	}
+
+	if isIndirectFile(bs) {
+		// The value is as indirect FileInfo pointer. Look up once more.
+		bs, err = db.Get(bs, nil)
+		if err != nil {
+			l.Debugln("surprise error (indirect):", err)
+			return nil, false
+		}
 	}
 
 	f, err := unmarshalTrunc(bs, trunc)
@@ -945,4 +955,19 @@ type errorSuggestion struct {
 
 func (e errorSuggestion) Error() string {
 	return fmt.Sprintf("%s (%s)", e.inner.Error(), e.suggestion)
+}
+
+func isIndirectFile(bs []byte) bool {
+	if len(bs) != keyHashLen+keyPrefixLen {
+		return false
+	}
+	return bs[0] == KeyTypeIndirect
+}
+
+func indirektFileKey(bs []byte) []byte {
+	key := make([]byte, keyHashLen+keyPrefixLen)
+	key[0] = KeyTypeIndirect
+	hash := sha256.Sum256(bs)
+	copy(key[1:], hash[:])
+	return key
 }
