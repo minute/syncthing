@@ -120,6 +120,7 @@ func (db *Instance) updateFiles(folder, device []byte, fs []protocol.FileInfo, m
 		// Local flags or the invalid bit might change without the version
 		// being bumped. The IsInvalid() method handles both.
 		if err == nil && ef.Version.Equal(f.Version) && ef.IsInvalid() == f.IsInvalid() {
+			l.Debugln("Skip identical", folder, f)
 			continue
 		}
 
