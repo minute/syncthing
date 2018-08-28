@@ -1776,6 +1776,8 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 			return true
 		}
 
+		l.Debugln("Batching", folder, f)
+
 		batch.append(f)
 		return true
 	})
@@ -1790,6 +1792,7 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 		return prevSequence, err
 	}
 
+	l.Debugf("New %s sequence number is %d", folder, f.Sequence)
 	return f.Sequence, err
 }
 
