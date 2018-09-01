@@ -98,7 +98,7 @@ func (db *Instance) updateSchema0to1(t transaction) {
 				changedFolders[string(folder)] = struct{}{}
 			}
 			gk = db.globalKeyInto(t, gk, folder, name)
-			removeFromGlobal(t, gk, folder, device, nil, nil)
+			db.removeFromGlobal(t, gk, folder, device, nil, nil)
 			t.Delete(dbi.Key(), nil)
 			continue
 		}
@@ -126,7 +126,7 @@ func (db *Instance) updateSchema0to1(t transaction) {
 		// Add invalid files to global list
 		if f.IsInvalid() {
 			gk = db.globalKeyInto(t, gk, folder, name)
-			if updateGlobal(t, gk, folder, device, f, meta) {
+			if db.updateGlobal(t, gk, folder, device, f, meta) {
 				if _, ok := changedFolders[string(folder)]; !ok {
 					changedFolders[string(folder)] = struct{}{}
 				}
@@ -166,7 +166,7 @@ func (db *Instance) updateSchema2to3(t transaction) {
 			name := []byte(f.FileName())
 			dk = db.deviceKeyInto(t, dk, folder, protocol.LocalDeviceID[:], name)
 			var v protocol.Vector
-			haveFile, ok := db.getFileTrunc(t, dk, true)
+			haveFile, ok := getFileTrunc(t, dk, true)
 			if ok {
 				v = haveFile.FileVersion()
 			}
