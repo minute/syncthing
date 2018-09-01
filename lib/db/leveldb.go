@@ -47,7 +47,7 @@ func (vl VersionList) String() string {
 // update brings the VersionList up to date with file. It returns the updated
 // VersionList, a potentially removed old FileVersion and its index, as well as
 // the index where the new FileVersion was inserted.
-func (vl VersionList) update(folder, device []byte, file protocol.FileInfo, db *Instance) (_ VersionList, removedFV FileVersion, removedAt int, insertedAt int) {
+func (vl VersionList) update(t transaction, folder, device []byte, file protocol.FileInfo, db *Instance) (_ VersionList, removedFV FileVersion, removedAt int, insertedAt int) {
 	removedAt, insertedAt = -1, -1
 	for i, v := range vl.Versions {
 		if bytes.Equal(v.Device, device) {
@@ -86,7 +86,7 @@ func (vl VersionList) update(folder, device []byte, file protocol.FileInfo, db *
 			// to determine the winner.)
 			//
 			// A surprise missing file entry here is counted as a win for us.
-			if of, ok := db.getFile(db.deviceKey(folder, v.Device, []byte(file.Name))); !ok || file.WinsConflict(of) {
+			if of, ok := db.getFile(t, folder, v.Device, []byte(file.Name)); !ok || file.WinsConflict(of) {
 				vl = vl.insertAt(i, nv)
 				return vl, removedFV, removedAt, i
 			}

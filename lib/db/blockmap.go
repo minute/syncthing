@@ -10,10 +10,10 @@ import (
 	"encoding/binary"
 	"fmt"
 
+	"github.com/pkg/errors"
 	"github.com/syncthing/syncthing/lib/osutil"
 	"github.com/syncthing/syncthing/lib/protocol"
 
-	"github.com/syndtr/goleveldb/leveldb"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
@@ -22,30 +22,20 @@ var blockFinder *BlockFinder
 const maxBatchSize = 1000
 
 type BlockMap struct {
-	db     *Instance
 	folder uint32
 }
 
-func NewBlockMap(db *Instance, folder uint32) *BlockMap {
+func NewBlockMap(folder uint32) *BlockMap {
 	return &BlockMap{
-		db:     db,
 		folder: folder,
 	}
 }
 
 // Add files to the block map, ignoring any deleted or invalid files.
-func (m *BlockMap) Add(files []protocol.FileInfo) error {
-	batch := new(leveldb.Batch)
+func (m *BlockMap) Add(t transaction, files []protocol.FileInfo) error {
 	buf := make([]byte, 4)
 	var key []byte
 	for _, file := range files {
-		if batch.Len() > maxBatchSize {
-			if err := m.db.Write(batch, nil); err != nil {
-				return err
-			}
-			batch.Reset()
-		}
-
 		if file.IsDirectory() || file.IsDeleted() || file.IsInvalid() {
 			continue
 		}
@@ -53,25 +43,19 @@ func (m *BlockMap) Add(files []protocol.FileInfo) error {
 		for i, block := range file.Blocks {
 			binary.BigEndian.PutUint32(buf, uint32(i))
 			key = m.blockKeyInto(key, block.Hash, file.Name)
-			batch.Put(key, buf)
+			if err := t.Put(key, buf, nil); err != nil {
+				return errors.Wrap(err, "blockmap add")
+			}
 		}
 	}
-	return m.db.Write(batch, nil)
+	return nil
 }
 
 // Update block map state, removing any deleted or invalid files.
-func (m *BlockMap) Update(files []protocol.FileInfo) error {
-	batch := new(leveldb.Batch)
+func (m *BlockMap) Update(t transaction, files []protocol.FileInfo) error {
 	buf := make([]byte, 4)
 	var key []byte
 	for _, file := range files {
-		if batch.Len() > maxBatchSize {
-			if err := m.db.Write(batch, nil); err != nil {
-				return err
-			}
-			batch.Reset()
-		}
-
 		if file.IsDirectory() {
 			continue
 		}
@@ -79,7 +63,9 @@ func (m *BlockMap) Update(files []protocol.FileInfo) error {
 		if file.IsDeleted() || file.IsInvalid() {
 			for _, block := range file.Blocks {
 				key = m.blockKeyInto(key, block.Hash, file.Name)
-				batch.Delete(key)
+				if err := t.Delete(key, nil); err != nil {
+					return errors.Wrap(err, "blockmap update")
+				}
 			}
 			continue
 		}
@@ -87,51 +73,41 @@ func (m *BlockMap) Update(files []protocol.FileInfo) error {
 		for i, block := range file.Blocks {
 			binary.BigEndian.PutUint32(buf, uint32(i))
 			key = m.blockKeyInto(key, block.Hash, file.Name)
-			batch.Put(key, buf)
+			if err := t.Put(key, buf, nil); err != nil {
+				return errors.Wrap(err, "blockmap update")
+			}
 		}
 	}
-	return m.db.Write(batch, nil)
+	return nil
 }
 
 // Discard block map state, removing the given files
-func (m *BlockMap) Discard(files []protocol.FileInfo) error {
-	batch := new(leveldb.Batch)
+func (m *BlockMap) Discard(t transaction, files []protocol.FileInfo) error {
 	var key []byte
 	for _, file := range files {
-		if batch.Len() > maxBatchSize {
-			if err := m.db.Write(batch, nil); err != nil {
-				return err
-			}
-			batch.Reset()
-		}
-
 		for _, block := range file.Blocks {
 			key = m.blockKeyInto(key, block.Hash, file.Name)
-			batch.Delete(key)
+			if err := t.Delete(key, nil); err != nil {
+				return errors.Wrap(err, "blockmap discard")
+			}
 		}
 	}
-	return m.db.Write(batch, nil)
+	return nil
 }
 
 // Drop block map, removing all entries related to this block map from the db.
-func (m *BlockMap) Drop() error {
-	batch := new(leveldb.Batch)
-	iter := m.db.NewIterator(util.BytesPrefix(m.blockKeyInto(nil, nil, "")[:keyPrefixLen+keyFolderLen]), nil)
+func (m *BlockMap) Drop(t transaction) error {
+	iter := t.NewIterator(util.BytesPrefix(m.blockKeyInto(nil, nil, "")[:keyPrefixLen+keyFolderLen]), nil)
 	defer iter.Release()
 	for iter.Next() {
-		if batch.Len() > maxBatchSize {
-			if err := m.db.Write(batch, nil); err != nil {
-				return err
-			}
-			batch.Reset()
+		if err := t.Delete(iter.Key(), nil); err != nil {
+			return errors.Wrap(err, "blockmap drop")
 		}
-
-		batch.Delete(iter.Key())
 	}
 	if iter.Error() != nil {
-		return iter.Error()
+		return errors.Wrap(iter.Error(), "blockmap drop")
 	}
-	return m.db.Write(batch, nil)
+	return nil
 }
 
 func (m *BlockMap) blockKeyInto(o, hash []byte, file string) []byte {
@@ -163,12 +139,12 @@ func (f *BlockFinder) String() string {
 // they are happy with the block) or false to continue iterating for whatever
 // reason. The iterator finally returns the result, whether or not a
 // satisfying block was eventually found.
-func (f *BlockFinder) Iterate(folders []string, hash []byte, iterFn func(string, string, int32) bool) bool {
+func (f *BlockFinder) Iterate(t transaction, folders []string, hash []byte, iterFn func(string, string, int32) bool) bool {
 	var key []byte
 	for _, folder := range folders {
-		folderID := f.db.folderIdx.ID([]byte(folder))
+		folderID := f.db.folderIdx.ID(t, []byte(folder))
 		key = blockKeyInto(key, hash, folderID, "")
-		iter := f.db.NewIterator(util.BytesPrefix(key), nil)
+		iter := t.NewIterator(util.BytesPrefix(key), nil)
 		defer iter.Release()
 
 		for iter.Next() && iter.Error() == nil {

@@ -38,7 +38,7 @@ func (e databaseDowngradeError) Error() string {
 	return fmt.Sprintf("Syncthing %s required", e.minSyncthingVersion)
 }
 
-func (db *Instance) updateSchema() error {
+func (db *Instance) updateSchema(t transaction) error {
 	miscDB := NewNamespacedKV(db, string(KeyTypeMiscData))
 	prevVersion, _ := miscDB.Int64("dbVersion")
 
@@ -55,20 +55,20 @@ func (db *Instance) updateSchema() error {
 	}
 
 	if prevVersion < 1 {
-		db.updateSchema0to1()
+		db.updateSchema0to1(t)
 	}
 	if prevVersion < 2 {
-		db.updateSchema1to2()
+		db.updateSchema1to2(t)
 	}
 	if prevVersion < 3 {
-		db.updateSchema2to3()
+		db.updateSchema2to3(t)
 	}
 	// This update fixes problems existing in versions 3 and 4
 	if prevVersion == 3 || prevVersion == 4 {
-		db.updateSchemaTo5()
+		db.updateSchemaTo5(t)
 	}
 	if prevVersion < 6 {
-		db.updateSchema5to6()
+		db.updateSchema5to6(t)
 	}
 
 	miscDB.PutInt64("dbVersion", dbVersion)
@@ -77,10 +77,7 @@ func (db *Instance) updateSchema() error {
 	return nil
 }
 
-func (db *Instance) updateSchema0to1() {
-	t := db.newReadWriteTransaction()
-	defer t.close()
-
+func (db *Instance) updateSchema0to1(t transaction) {
 	dbi := t.NewIterator(util.BytesPrefix([]byte{KeyTypeDevice}), nil)
 	defer dbi.Release()
 
@@ -100,10 +97,9 @@ func (db *Instance) updateSchema0to1() {
 			if _, ok := changedFolders[string(folder)]; !ok {
 				changedFolders[string(folder)] = struct{}{}
 			}
-			gk = db.globalKeyInto(gk, folder, name)
-			t.removeFromGlobal(gk, folder, device, nil, nil)
-			t.Delete(dbi.Key())
-			t.checkFlush()
+			gk = db.globalKeyInto(t, gk, folder, name)
+			removeFromGlobal(t, gk, folder, device, nil, nil)
+			t.Delete(dbi.Key(), nil)
 			continue
 		}
 
@@ -123,15 +119,14 @@ func (db *Instance) updateSchema0to1() {
 			if err != nil {
 				panic("can't happen: " + err.Error())
 			}
-			t.Put(dbi.Key(), bs)
-			t.checkFlush()
+			t.Put(dbi.Key(), bs, nil)
 			symlinkConv++
 		}
 
 		// Add invalid files to global list
 		if f.IsInvalid() {
-			gk = db.globalKeyInto(gk, folder, name)
-			if t.updateGlobal(gk, folder, device, f, meta) {
+			gk = db.globalKeyInto(t, gk, folder, name)
+			if updateGlobal(t, gk, folder, device, f, meta) {
 				if _, ok := changedFolders[string(folder)]; !ok {
 					changedFolders[string(folder)] = struct{}{}
 				}
@@ -141,53 +136,45 @@ func (db *Instance) updateSchema0to1() {
 	}
 
 	for folder := range changedFolders {
-		db.dropFolderMeta([]byte(folder))
+		db.dropFolderMeta(t, []byte(folder))
 	}
 }
 
 // updateSchema1to2 introduces a sequenceKey->deviceKey bucket for local items
 // to allow iteration in sequence order (simplifies sending indexes).
-func (db *Instance) updateSchema1to2() {
-	t := db.newReadWriteTransaction()
-	defer t.close()
-
+func (db *Instance) updateSchema1to2(t transaction) {
 	var sk []byte
 	var dk []byte
 	for _, folderStr := range db.ListFolders() {
 		folder := []byte(folderStr)
-		db.withHave(folder, protocol.LocalDeviceID[:], nil, true, func(f FileIntf) bool {
-			sk = db.sequenceKeyInto(sk, folder, f.SequenceNo())
-			dk = db.deviceKeyInto(dk, folder, protocol.LocalDeviceID[:], []byte(f.FileName()))
-			t.Put(sk, dk)
-			t.checkFlush()
+		db.withHave(t, folder, protocol.LocalDeviceID[:], nil, true, func(f FileIntf) bool {
+			sk = db.sequenceKeyInto(t, sk, folder, f.SequenceNo())
+			dk = db.deviceKeyInto(t, dk, folder, protocol.LocalDeviceID[:], []byte(f.FileName()))
+			t.Put(sk, dk, nil)
 			return true
 		})
 	}
 }
 
 // updateSchema2to3 introduces a needKey->nil bucket for locally needed files.
-func (db *Instance) updateSchema2to3() {
-	t := db.newReadWriteTransaction()
-	defer t.close()
-
+func (db *Instance) updateSchema2to3(t transaction) {
 	var nk []byte
 	var dk []byte
 	for _, folderStr := range db.ListFolders() {
 		folder := []byte(folderStr)
-		db.withGlobal(folder, nil, true, func(f FileIntf) bool {
+		db.withGlobal(t, folder, nil, true, func(f FileIntf) bool {
 			name := []byte(f.FileName())
-			dk = db.deviceKeyInto(dk, folder, protocol.LocalDeviceID[:], name)
+			dk = db.deviceKeyInto(t, dk, folder, protocol.LocalDeviceID[:], name)
 			var v protocol.Vector
-			haveFile, ok := db.getFileTrunc(dk, true)
+			haveFile, ok := db.getFileTrunc(t, dk, true)
 			if ok {
 				v = haveFile.FileVersion()
 			}
 			if !need(f, ok, v) {
 				return true
 			}
-			nk = t.db.needKeyInto(nk, folder, []byte(f.FileName()))
-			t.Put(nk, nil)
-			t.checkFlush()
+			nk = db.needKeyInto(t, nk, folder, []byte(f.FileName()))
+			t.Put(nk, nil, nil)
 			return true
 		})
 	}
@@ -197,30 +184,25 @@ func (db *Instance) updateSchema2to3() {
 // release candidates (dbVersion 3 and 4)
 // https://github.com/syncthing/syncthing/issues/5007
 // https://github.com/syncthing/syncthing/issues/5053
-func (db *Instance) updateSchemaTo5() {
-	t := db.newReadWriteTransaction()
+func (db *Instance) updateSchemaTo5(t transaction) {
 	var nk []byte
 	for _, folderStr := range db.ListFolders() {
-		nk = db.needKeyInto(nk, []byte(folderStr), nil)
-		t.deleteKeyPrefix(nk[:keyPrefixLen+keyFolderLen])
+		nk = db.needKeyInto(t, nk, []byte(folderStr), nil)
+		deleteKeyPrefix(t, nk[:keyPrefixLen+keyFolderLen])
 	}
-	t.close()
 
-	db.updateSchema2to3()
+	db.updateSchema2to3(t)
 }
 
-func (db *Instance) updateSchema5to6() {
+func (db *Instance) updateSchema5to6(t transaction) {
 	// For every local file with the Invalid bit set, clear the Invalid bit and
 	// set LocalFlags = FlagLocalIgnored.
-
-	t := db.newReadWriteTransaction()
-	defer t.close()
 
 	var dk []byte
 
 	for _, folderStr := range db.ListFolders() {
 		folder := []byte(folderStr)
-		db.withHave(folder, protocol.LocalDeviceID[:], nil, false, func(f FileIntf) bool {
+		db.withHave(t, folder, protocol.LocalDeviceID[:], nil, false, func(f FileIntf) bool {
 			if !f.IsInvalid() {
 				return true
 			}
@@ -230,10 +212,9 @@ func (db *Instance) updateSchema5to6() {
 			fi.LocalFlags = protocol.FlagLocalIgnored
 			bs, _ := fi.Marshal()
 
-			dk = db.deviceKeyInto(dk, folder, protocol.LocalDeviceID[:], []byte(fi.Name))
-			t.Put(dk, bs)
+			dk = db.deviceKeyInto(t, dk, folder, protocol.LocalDeviceID[:], []byte(fi.Name))
+			t.Put(dk, bs, nil)
 
-			t.checkFlush()
 			return true
 		})
 	}
