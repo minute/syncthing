@@ -12,8 +12,99 @@ import (
 
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/iterator"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
+
+// The reader interface is satisifed by the *leveldb.DB (for inconsistent
+// reads), the *leveldb.Snapshot and the *leveldb.Transaction. The
+// Transaction is not by itself a snapshot, though.
+type reader interface {
+	Get(key []byte, ro *opt.ReadOptions) ([]byte, error)
+	NewIterator(slice *util.Range, ro *opt.ReadOptions) iterator.Iterator
+}
+
+// The writer interface is satsifed by the *leveldb.DB (for inconsistent
+// writes), and the *leveldb.Transaction.
+type writer interface {
+	Delete(key []byte, wo *opt.WriteOptions) error
+	Put(key, value []byte, wo *opt.WriteOptions) error
+	Write(b *leveldb.Batch, wo *opt.WriteOptions) error
+}
+
+type transaction interface {
+	reader
+	writer
+}
+
+// withoutTransaction runs fn in a transaction-less environment; reads are
+// immediate and writes are dirty.
+func withoutTransaction(db *Instance, fn func(transaction) error) error {
+	return fn(db)
+}
+
+// inReadTransaction runs fn in a read-only transaction where reads are
+// consistent (writes will panic).
+func inReadTransaction(db *Instance, fn func(transaction) error) error {
+	snap, err := db.GetSnapshot()
+	if err != nil {
+		return err
+	}
+	defer snap.Release()
+	return fn(noWriter{snap})
+}
+
+// inDirtyTransaction runs fn in a transaction where reads are consistent
+// and writes are dirty.
+func inDirtyTransaction(db *Instance, fn func(transaction) error) error {
+	snap, err := db.GetSnapshot()
+	if err != nil {
+		return err
+	}
+	defer snap.Release()
+
+	tran := struct {
+		reader
+		writer
+	}{snap, db}
+	return fn(tran)
+}
+
+// inWriteTransaction runs fn in a transaction where reads are consistent
+// and writes are applied atomically at the end, if fn returns nil. If fn
+// returns an error the writes are discarded.
+func inWriteTransaction(db *Instance, fn func(transaction) error) error {
+	return inReadTransaction(db, func(rt transaction) error {
+		wt, err := db.OpenTransaction()
+		if err != nil {
+			return err
+		}
+		defer wt.Discard()
+
+		tran := struct {
+			reader
+			writer
+		}{rt, wt}
+		if err := fn(tran); err != nil {
+			return err
+		}
+
+		return wt.Commit()
+	})
+}
+
+// noWriter is a writer that cannot write. This can be passed to functions
+// that expect a writer, but will not use it (typically, the smallIndex when
+// it's known the lookup will succeed).
+type noWriter struct {
+	reader
+}
+
+func (noWriter) Delete(key []byte, wo *opt.WriteOptions) error      { panic("put: Delete disallowed") }
+func (noWriter) Put(key, value []byte, wo *opt.WriteOptions) error  { panic("put: Put disallowed") }
+func (noWriter) Write(b *leveldb.Batch, wo *opt.WriteOptions) error { panic("bug: Write disallowed") }
+func (noWriter) Close() error                                       { panic("bug: Write disallowed") }
 
 // A readOnlyTransaction represents a database snapshot.
 type readOnlyTransaction struct {
