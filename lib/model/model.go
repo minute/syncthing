@@ -1756,6 +1756,13 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 			return false
 		}
 
+		if f.Sequence > 0 && fi.SequenceNo() <= f.Sequence {
+			panic(fmt.Sprintln("non-increasing sequence, previous:", f, "higher than current:", fi))
+		}
+		if fi.SequenceNo() <= prevSequence {
+			panic(fmt.Sprintln("sequence lower than requested:", prevSequence, "in file:", fi))
+		}
+
 		f = fi.(protocol.FileInfo)
 
 		// Mark the file as invalid if any of the local bad stuff flags are set.

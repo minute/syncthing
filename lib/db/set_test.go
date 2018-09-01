@@ -914,6 +914,55 @@ func TestWithHaveSequence(t *testing.T) {
 	})
 }
 
+func TestStressWithHaveSequence(t *testing.T) {
+	ldb := db.OpenMemory()
+
+	folder := "test"
+	s := db.NewFileSet(folder, fs.NewFilesystem(fs.FilesystemTypeBasic, "."), ldb)
+
+	localHave := fileList{
+		protocol.FileInfo{Name: "a", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1000}}}, Blocks: genBlocks(10)},
+		protocol.FileInfo{Name: "b", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1001}}}, Type: protocol.FileInfoTypeDirectory},
+		protocol.FileInfo{Name: "c", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1002}}}, Blocks: genBlocks(50), RawInvalid: true},
+		protocol.FileInfo{Name: "d", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1003}}}, Blocks: genBlocks(70)},
+		protocol.FileInfo{Name: "e", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1003}}}, RawInvalid: true},
+	}
+
+	var prevSeq int64 = 0
+	var prevPrevSeq int64 = 0
+	for i := 0; i < 100; i++ {
+		for j, f := range localHave {
+			localHave[j].Version = f.Version.Update(42)
+			if i+j%3 == 0 {
+				localHave[j].Deleted = true
+				localHave[j].Blocks = nil
+			} else {
+				localHave[j].Deleted = false
+				if !f.IsDirectory() {
+					localHave[j].Blocks = genBlocks(i + j)
+				}
+			}
+		}
+		s.Update(protocol.LocalDeviceID, localHave)
+
+		s.WithHaveSequence(prevSeq+1, func(fi db.FileIntf) bool {
+			if fi.SequenceNo() != prevSeq+1 {
+				t.Fatal("Wrong", prevSeq+1, fi.SequenceNo())
+			}
+			prevSeq = fi.SequenceNo()
+			return true
+		})
+
+		if prevSeq != prevPrevSeq+int64(len(localHave)) {
+			t.Fatal("booh")
+		}
+		prevPrevSeq = prevSeq
+
+		s.Update(remoteDevice0, localHave[2:])
+		s.Update(remoteDevice1, localHave[1:])
+	}
+}
+
 func TestIssue4925(t *testing.T) {
 	ldb := db.OpenMemory()
 

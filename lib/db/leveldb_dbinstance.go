@@ -217,10 +217,18 @@ func (db *Instance) withHaveSequence(folder []byte, startSeq int64, fn Iterator)
 	defer dbi.Release()
 
 	for dbi.Next() {
+		key := dbi.Key()
+		seq := int64(binary.BigEndian.Uint64(key[keyPrefixLen+keyFolderLen:]))
+		if seq < startSeq {
+			panic(fmt.Sprintf("sequence %d < start %d", seq, startSeq))
+		}
 		f, ok := db.getFile(dbi.Value())
 		if !ok {
 			l.Debugln("missing file for sequence number", db.sequenceKeySequence(dbi.Key()))
 			continue
+		}
+		if f.Sequence != seq {
+			panic(fmt.Sprintf("corruption, %d != %d", f.Sequence, seq))
 		}
 		if !fn(f) {
 			return
