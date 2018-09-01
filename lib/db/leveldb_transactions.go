@@ -8,17 +8,16 @@ package db
 
 import (
 	"bytes"
-	"sync/atomic"
 
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syndtr/goleveldb/leveldb"
+	"github.com/syndtr/goleveldb/leveldb/opt"
 	"github.com/syndtr/goleveldb/leveldb/util"
 )
 
 // A readOnlyTransaction represents a database snapshot.
 type readOnlyTransaction struct {
 	*leveldb.Snapshot
-	db *Instance
 }
 
 func (db *Instance) newReadOnlyTransaction() readOnlyTransaction {
@@ -40,55 +39,78 @@ func (t readOnlyTransaction) getFile(folder, device, file []byte) (protocol.File
 	return t.db.getFile(t.db.deviceKey(folder, device, file))
 }
 
-// A readWriteTransaction is a readOnlyTransaction plus a batch for writes.
-// The batch will be committed on close() or by checkFlush() if it exceeds the
-// batch size.
+// A readWriteTransaction is a readOnlyTransaction plus a Transaction for writes.
 type readWriteTransaction struct {
 	readOnlyTransaction
-	*leveldb.Batch
+	*leveldb.Transaction
 }
 
 func (db *Instance) newReadWriteTransaction() readWriteTransaction {
-	t := db.newReadOnlyTransaction()
+	rt := db.newReadOnlyTransaction()
+	wt, err := db.OpenTransaction()
+	if err != nil {
+		panic(err)
+	}
 	return readWriteTransaction{
-		readOnlyTransaction: t,
-		Batch:               new(leveldb.Batch),
+		readOnlyTransaction: rt,
+		Transaction:         wt,
 	}
 }
 
 func (t readWriteTransaction) close() {
-	t.flush()
 	t.readOnlyTransaction.close()
-}
-
-func (t readWriteTransaction) checkFlush() {
-	if t.Batch.Len() > batchFlushSize {
-		t.flush()
-		t.Batch.Reset()
-	}
-}
-
-func (t readWriteTransaction) flush() {
-	if err := t.db.Write(t.Batch, nil); err != nil {
+	if err := t.Commit(); err != nil {
 		panic(err)
 	}
-	atomic.AddInt64(&t.db.committed, int64(t.Batch.Len()))
 }
 
-func (t readWriteTransaction) insertFile(fk, folder, device []byte, file protocol.FileInfo) {
-	l.Debugf("insert; folder=%q device=%v %v", folder, protocol.DeviceIDFromBytes(device), file)
+// A batchedWriter is a wrapper around a writer that does automatic batching.
+type batchedWriter struct {
+	batch *leveldb.Batch
+	next  writer
+}
 
-	t.Put(fk, mustMarshal(&file))
+func newBatchedWriter(w writer) *batchedWriter {
+	return &batchedWriter{
+		batch: new(leveldb.Batch),
+		next:  w,
+	}
+}
+
+func (w *batchedWriter) Delete(key []byte, wo *opt.WriteOptions) error {
+	w.batch.Delete(key)
+	w.checkFlush()
+}
+
+func (w *batchedWriter) Put(key, value []byte, wo *opt.WriteOptions) error {
+	w.batch.Put(key, value)
+	w.checkFlush()
+}
+
+func (w *batchedWriter) Write(b *leveldb.Batch, wo *opt.WriteOptions) error {
+	w.flush()
+	w.next.Write(b)
+}
+
+func (w *batchedWriter) checkFlush() {
+	if w.batch.Len() > batchFlushSize {
+		w.flush()
+	}
+}
+
+func (w *batchedWriter) flush() {
+	if err := w.next.Write(b.batch, nil); err != nil {
+		panic(err)
+	}
+	w.batch.Reset()
 }
 
 // updateGlobal adds this device+version to the version list for the given
 // file. If the device is already present in the list, the version is updated.
 // If the file does not have an entry in the global list, it is created.
-func (t readWriteTransaction) updateGlobal(gk, folder, device []byte, file protocol.FileInfo, meta *metadataTracker) bool {
-	l.Debugf("update global; folder=%q device=%v file=%q version=%v invalid=%v", folder, protocol.DeviceIDFromBytes(device), file.Name, file.Version, file.IsInvalid())
-
+func updateGlobal(w writer, gk, folder, device []byte, file protocol.FileInfo, meta *metadataTracker) bool {
 	var fl VersionList
-	if svl, err := t.Get(gk, nil); err == nil {
+	if svl, err := r.Get(gk, nil); err == nil {
 		fl.Unmarshal(svl) // Ignore error, continue with empty fl
 	}
 	fl, removedFV, removedAt, insertedAt := fl.update(folder, device, file, t.db)
@@ -171,10 +193,8 @@ func need(global FileIntf, haveLocal bool, localVersion protocol.Vector) bool {
 // removeFromGlobal removes the device from the global version list for the
 // given file. If the version list is empty after this, the file entry is
 // removed entirely.
-func (t readWriteTransaction) removeFromGlobal(gk, folder, device, file []byte, meta *metadataTracker) {
-	l.Debugf("remove from global; folder=%q device=%v file=%q", folder, protocol.DeviceIDFromBytes(device), file)
-
-	svl, err := t.Get(gk, nil)
+func (t readWriteTransaction) removeFromGlobal(w writer, gk, folder, device, file []byte, meta *metadataTracker) {
+	svl, err := w.Get(gk, nil)
 	if err != nil {
 		// We might be called to "remove" a global version that doesn't exist
 		// if the first update for the file is already marked invalid.
@@ -192,7 +212,7 @@ func (t readWriteTransaction) removeFromGlobal(gk, folder, device, file []byte, 
 	for i := range fl.Versions {
 		if bytes.Equal(fl.Versions[i].Device, device) {
 			if i == 0 && meta != nil {
-				f, ok := t.getFile(folder, device, file)
+				f, ok := getFile(w, folder, device, file)
 				if !ok {
 					// didn't exist anyway, apparently
 					continue
@@ -206,13 +226,12 @@ func (t readWriteTransaction) removeFromGlobal(gk, folder, device, file []byte, 
 	}
 
 	if len(fl.Versions) == 0 {
-		t.Delete(gk)
+		w.Delete(gk)
 		return
 	}
-	l.Debugf("new global after remove: %v", fl)
-	t.Put(gk, mustMarshal(&fl))
+	w.Put(gk, mustMarshal(&fl))
 	if removed {
-		if f, ok := t.getFile(folder, fl.Versions[0].Device, file); ok {
+		if f, ok := getFile(w, folder, fl.Versions[0].Device, file); ok {
 			// A failure to get the file here is surprising and our
 			// global size data will be incorrect until a restart...
 			meta.addFile(protocol.GlobalDeviceID, f)
@@ -220,11 +239,10 @@ func (t readWriteTransaction) removeFromGlobal(gk, folder, device, file []byte, 
 	}
 }
 
-func (t readWriteTransaction) deleteKeyPrefix(prefix []byte) {
-	dbi := t.NewIterator(util.BytesPrefix(prefix), nil)
+func deleteKeyPrefix(w writer, prefix []byte) {
+	dbi := w.NewIterator(util.BytesPrefix(prefix), nil)
 	for dbi.Next() {
-		t.Delete(dbi.Key())
-		t.checkFlush()
+		w.Delete(dbi.Key(), nil)
 	}
 	dbi.Release()
 }
