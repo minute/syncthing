@@ -66,22 +66,26 @@ func init() {
 }
 
 func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
-	var s = FileSet{
-		folder:      folder,
-		fs:          fs,
-		db:          db,
-		blockmap:    NewBlockMap(db, db.folderIdx.ID([]byte(folder))),
-		meta:        newMetadataTracker(),
-		updateMutex: sync.NewMutex(),
-	}
+	var s FileSet
+	db.tm.withoutTransaction(func(t transaction) error {
+		s = FileSet{
+			folder:      folder,
+			fs:          fs,
+			db:          db,
+			blockmap:    NewBlockMap(db.folderIdx.ID(t, []byte(folder))),
+			meta:        newMetadataTracker(),
+			updateMutex: sync.NewMutex(),
+		}
 
-	if err := s.meta.fromDB(db, []byte(folder)); err != nil {
-		l.Infof("No stored folder metadata for %q: recalculating", folder)
-		s.recalcCounts()
-	} else if age := time.Since(s.meta.Created()); age > databaseRecheckInterval {
-		l.Infof("Stored folder metadata for %q is %v old; recalculating", folder, age)
-		s.recalcCounts()
-	}
+		if err := s.meta.fromDB(t, db, []byte(folder)); err != nil {
+			l.Infof("No stored folder metadata for %q: recalculating", folder)
+			s.recalcCounts()
+		} else if age := time.Since(s.meta.Created()); age > databaseRecheckInterval {
+			l.Infof("Stored folder metadata for %q is %v old; recalculating", folder, age)
+			s.recalcCounts()
+		}
+		return nil
+	})
 
 	return &s
 }
@@ -89,17 +93,20 @@ func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
 func (s *FileSet) recalcCounts() {
 	s.meta = newMetadataTracker()
 
-	s.db.checkGlobals([]byte(s.folder), s.meta)
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.checkGlobals(t, []byte(s.folder), s.meta)
 
-	var deviceID protocol.DeviceID
-	s.db.withAllFolderTruncated([]byte(s.folder), func(device []byte, f FileInfoTruncated) bool {
-		copy(deviceID[:], device)
-		s.meta.addFile(deviceID, f)
-		return true
+		var deviceID protocol.DeviceID
+		s.db.withAllFolderTruncated(t, []byte(s.folder), func(device []byte, f FileInfoTruncated) bool {
+			copy(deviceID[:], device)
+			s.meta.addFile(deviceID, f)
+			return true
+		})
+
+		s.meta.SetCreated()
+		s.meta.toDB(t, s.db, []byte(s.folder))
+		return nil
 	})
-
-	s.meta.SetCreated()
-	s.meta.toDB(s.db, []byte(s.folder))
 }
 
 func (s *FileSet) Drop(device protocol.DeviceID) {
@@ -108,25 +115,28 @@ func (s *FileSet) Drop(device protocol.DeviceID) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
-	s.db.dropDeviceFolder(device[:], []byte(s.folder), s.meta)
+	s.db.tm.inWriteTransaction(func(t transaction) error {
+		s.db.dropDeviceFolder(t, device[:], []byte(s.folder), s.meta)
 
-	if device == protocol.LocalDeviceID {
-		s.blockmap.Drop()
-		s.meta.resetCounts(device)
-		// We deliberately do not reset the sequence number here. Dropping
-		// all files for the local device ID only happens in testing - which
-		// expects the sequence to be retained, like an old Replace() of all
-		// files would do. However, if we ever did it "in production" we
-		// would anyway want to retain the sequence for delta indexes to be
-		// happy.
-	} else {
-		// Here, on the other hand, we want to make sure that any file
-		// announced from the remote is newer than our current sequence
-		// number.
-		s.meta.resetAll(device)
-	}
+		if device == protocol.LocalDeviceID {
+			s.blockmap.Drop(t)
+			s.meta.resetCounts(device)
+			// We deliberately do not reset the sequence number here. Dropping
+			// all files for the local device ID only happens in testing - which
+			// expects the sequence to be retained, like an old Replace() of all
+			// files would do. However, if we ever did it "in production" we
+			// would anyway want to retain the sequence for delta indexes to be
+			// happy.
+		} else {
+			// Here, on the other hand, we want to make sure that any file
+			// announced from the remote is newer than our current sequence
+			// number.
+			s.meta.resetAll(device)
+		}
 
-	s.meta.toDB(s.db, []byte(s.folder))
+		s.meta.toDB(t, s.db, []byte(s.folder))
+		return nil
+	})
 }
 
 func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
@@ -140,86 +150,108 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
-	if device == protocol.LocalDeviceID {
-		discards := make([]protocol.FileInfo, 0, len(fs))
-		updates := make([]protocol.FileInfo, 0, len(fs))
-		// db.UpdateFiles will sort unchanged files out -> save one db lookup
-		// filter slice according to https://github.com/golang/go/wiki/SliceTricks#filtering-without-allocating
-		oldFs := fs
-		fs = fs[:0]
-		var dk []byte
-		folder := []byte(s.folder)
-		for _, nf := range oldFs {
-			dk = s.db.deviceKeyInto(dk, folder, device[:], []byte(osutil.NormalizedFilename(nf.Name)))
-			ef, ok := s.db.getFile(dk)
-			if ok && ef.Version.Equal(nf.Version) && ef.IsInvalid() == nf.IsInvalid() {
-				continue
-			}
+	s.db.tm.inWriteTransaction(func(t transaction) error {
+		if device == protocol.LocalDeviceID {
+			discards := make([]protocol.FileInfo, 0, len(fs))
+			updates := make([]protocol.FileInfo, 0, len(fs))
+			// db.UpdateFiles will sort unchanged files out -> save one db lookup
+			// filter slice according to https://github.com/golang/go/wiki/SliceTricks#filtering-without-allocating
+			oldFs := fs
+			fs = fs[:0]
+			var dk []byte
+			folder := []byte(s.folder)
+			for _, nf := range oldFs {
+				dk = s.db.deviceKeyInto(t, dk, folder, device[:], []byte(osutil.NormalizedFilename(nf.Name)))
+				ef, ok := getFileKeyed(t, dk)
+				if ok && ef.Version.Equal(nf.Version) && ef.IsInvalid() == nf.IsInvalid() {
+					continue
+				}
 
-			nf.Sequence = s.meta.nextSeq(protocol.LocalDeviceID)
-			fs = append(fs, nf)
+				nf.Sequence = s.meta.nextSeq(protocol.LocalDeviceID)
+				fs = append(fs, nf)
 
-			if ok {
-				discards = append(discards, ef)
+				if ok {
+					discards = append(discards, ef)
+				}
+				updates = append(updates, nf)
 			}
-			updates = append(updates, nf)
+			s.blockmap.Discard(t, discards)
+			s.blockmap.Update(t, updates)
+			s.db.removeSequences(t, folder, discards)
+			s.db.addSequences(t, folder, updates)
 		}
-		s.blockmap.Discard(discards)
-		s.blockmap.Update(updates)
-		s.db.removeSequences(folder, discards)
-		s.db.addSequences(folder, updates)
-	}
 
-	s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
-	s.meta.toDB(s.db, []byte(s.folder))
+		s.db.updateFiles(t, []byte(s.folder), device[:], fs, s.meta)
+		s.meta.toDB(t, s.db, []byte(s.folder))
+		return nil
+	})
 }
 
 func (s *FileSet) WithNeed(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithNeed(%v)", s.folder, device)
-	s.db.withNeed([]byte(s.folder), device[:], false, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withNeed(t, []byte(s.folder), device[:], false, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) WithNeedTruncated(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithNeedTruncated(%v)", s.folder, device)
-	s.db.withNeed([]byte(s.folder), device[:], true, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withNeed(t, []byte(s.folder), device[:], true, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) WithHave(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithHave(%v)", s.folder, device)
-	s.db.withHave([]byte(s.folder), device[:], nil, false, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withHave(t, []byte(s.folder), device[:], nil, false, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) WithHaveTruncated(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithHaveTruncated(%v)", s.folder, device)
-	s.db.withHave([]byte(s.folder), device[:], nil, true, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withHave(t, []byte(s.folder), device[:], nil, true, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) WithHaveSequence(startSeq int64, fn Iterator) {
 	l.Debugf("%s WithHaveSequence(%v)", s.folder, startSeq)
-	s.db.withHaveSequence([]byte(s.folder), startSeq, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withHaveSequence(t, []byte(s.folder), startSeq, nativeFileIterator(fn))
+	})
 }
 
 // Except for an item with a path equal to prefix, only children of prefix are iterated.
 // E.g. for prefix "dir", "dir/file" is iterated, but "dir.file" is not.
 func (s *FileSet) WithPrefixedHaveTruncated(device protocol.DeviceID, prefix string, fn Iterator) {
 	l.Debugf(`%s WithPrefixedHaveTruncated(%v, "%v")`, s.folder, device, prefix)
-	s.db.withHave([]byte(s.folder), device[:], []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withHave(t, []byte(s.folder), device[:], []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+	})
 }
+
 func (s *FileSet) WithGlobal(fn Iterator) {
 	l.Debugf("%s WithGlobal()", s.folder)
-	s.db.withGlobal([]byte(s.folder), nil, false, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withGlobal(t, []byte(s.folder), nil, false, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) WithGlobalTruncated(fn Iterator) {
 	l.Debugf("%s WithGlobalTruncated()", s.folder)
-	s.db.withGlobal([]byte(s.folder), nil, true, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withGlobal(t, []byte(s.folder), nil, true, nativeFileIterator(fn))
+	})
 }
 
 // Except for an item with a path equal to prefix, only children of prefix are iterated.
 // E.g. for prefix "dir", "dir/file" is iterated, but "dir.file" is not.
 func (s *FileSet) WithPrefixedGlobalTruncated(prefix string, fn Iterator) {
 	l.Debugf(`%s WithPrefixedGlobalTruncated("%v")`, s.folder, prefix)
-	s.db.withGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+	s.db.tm.inReadTransaction(func(t transaction) error {
+		s.db.withGlobal(t, []byte(s.folder), []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+	})
 }
 
 func (s *FileSet) Get(device protocol.DeviceID, file string) (protocol.FileInfo, bool) {
