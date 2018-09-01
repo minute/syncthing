@@ -55,20 +55,20 @@ func (m *metadataTracker) Marshal() ([]byte, error) {
 
 // toDB saves the marshalled metadataTracker to the given db, under the key
 // corresponding to the given folder
-func (m *metadataTracker) toDB(db *Instance, folder []byte) error {
-	key := db.folderMetaKey(folder)
+func (m *metadataTracker) toDB(w writer, db *Instance, folder []byte) error {
+	key := db.folderMetaKey(w, folder)
 	bs, err := m.Marshal()
 	if err != nil {
 		return err
 	}
-	return db.Put(key, bs, nil)
+	return w.Put(key, bs, nil)
 }
 
 // fromDB initializes the metadataTracker from the marshalled data found in
 // the database under the key corresponding to the given folder
-func (m *metadataTracker) fromDB(db *Instance, folder []byte) error {
-	key := db.folderMetaKey(folder)
-	bs, err := db.Get(key, nil)
+func (m *metadataTracker) fromDB(t transaction, db *Instance, folder []byte) error {
+	key := db.folderMetaKey(t, folder)
+	bs, err := t.Get(key, nil)
 	if err != nil {
 		return err
 	}
