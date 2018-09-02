@@ -12,6 +12,7 @@ import (
 	"os"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/d4l3k/messagediff"
 	"github.com/syncthing/syncthing/lib/db"
@@ -915,51 +916,48 @@ func TestWithHaveSequence(t *testing.T) {
 }
 
 func TestStressWithHaveSequence(t *testing.T) {
+	// This races two loops against each other: one that contiously does
+	// updates, and one that continously does sequence walks. The test fails
+	// if the sequence walker sees a discontinuity.
+
 	ldb := db.OpenMemory()
 
 	folder := "test"
 	s := db.NewFileSet(folder, fs.NewFilesystem(fs.FilesystemTypeBasic, "."), ldb)
 
-	localHave := fileList{
-		protocol.FileInfo{Name: "a", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1000}}}, Blocks: genBlocks(10)},
-		protocol.FileInfo{Name: "b", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1001}}}, Type: protocol.FileInfoTypeDirectory},
-		protocol.FileInfo{Name: "c", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1002}}}, Blocks: genBlocks(50), RawInvalid: true},
-		protocol.FileInfo{Name: "d", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1003}}}, Blocks: genBlocks(70)},
-		protocol.FileInfo{Name: "e", Version: protocol.Vector{Counters: []protocol.Counter{{ID: myID, Value: 1003}}}, RawInvalid: true},
+	var localHave []protocol.FileInfo
+	for i := 0; i < 100; i++ {
+		localHave = append(localHave, protocol.FileInfo{Name: fmt.Sprintf("file%d", i), Blocks: genBlocks(i * 10)})
 	}
 
-	var prevSeq int64 = 0
-	var prevPrevSeq int64 = 0
-	for i := 0; i < 100; i++ {
-		for j, f := range localHave {
-			localHave[j].Version = f.Version.Update(42)
-			if i+j%3 == 0 {
-				localHave[j].Deleted = true
-				localHave[j].Blocks = nil
-			} else {
-				localHave[j].Deleted = false
-				if !f.IsDirectory() {
-					localHave[j].Blocks = genBlocks(i + j)
-				}
+	done := make(chan struct{})
+	t0 := time.Now()
+	go func() {
+		for time.Since(t0) < 1*time.Second {
+			for j, f := range localHave {
+				localHave[j].Version = f.Version.Update(42)
 			}
-		}
-		s.Update(protocol.LocalDeviceID, localHave)
 
+			s.Update(protocol.LocalDeviceID, localHave)
+		}
+		close(done)
+	}()
+
+	var prevSeq int64 = 0
+loop:
+	for {
+		select {
+		case <-done:
+			break loop
+		default:
+		}
 		s.WithHaveSequence(prevSeq+1, func(fi db.FileIntf) bool {
-			if fi.SequenceNo() != prevSeq+1 {
-				t.Fatal("Wrong", prevSeq+1, fi.SequenceNo())
+			if fi.SequenceNo() < prevSeq+1 {
+				t.Fatal("Skipped ", prevSeq+1, fi.SequenceNo())
 			}
 			prevSeq = fi.SequenceNo()
 			return true
 		})
-
-		if prevSeq != prevPrevSeq+int64(len(localHave)) {
-			t.Fatal("booh")
-		}
-		prevPrevSeq = prevSeq
-
-		s.Update(remoteDevice0, localHave[2:])
-		s.Update(remoteDevice1, localHave[1:])
 	}
 }
 
