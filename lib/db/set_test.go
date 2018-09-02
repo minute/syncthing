@@ -920,6 +920,10 @@ func TestStressWithHaveSequence(t *testing.T) {
 	// updates, and one that continously does sequence walks. The test fails
 	// if the sequence walker sees a discontinuity.
 
+	if testing.Short() {
+		t.Skip("Takes a long time")
+	}
+
 	ldb := db.OpenMemory()
 
 	folder := "test"
@@ -933,7 +937,7 @@ func TestStressWithHaveSequence(t *testing.T) {
 	done := make(chan struct{})
 	t0 := time.Now()
 	go func() {
-		for time.Since(t0) < 1*time.Second {
+		for time.Since(t0) < 10*time.Second {
 			for j, f := range localHave {
 				localHave[j].Version = f.Version.Update(42)
 			}

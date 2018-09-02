@@ -1756,11 +1756,13 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 			return false
 		}
 
-		if f.Sequence > 0 && fi.SequenceNo() <= f.Sequence {
-			panic(fmt.Sprintln("non-increasing sequence, previous:", f, "higher than current:", fi))
-		}
-		if fi.SequenceNo() <= prevSequence {
-			panic(fmt.Sprintln("sequence lower than requested:", prevSequence, "in file:", fi))
+		if shouldDebug() {
+			if fi.SequenceNo() < prevSequence+1 {
+				panic(fmt.Sprintln("sequence lower than requested, got:", fi.SequenceNo(), ", asked to start at:", prevSequence+1))
+			}
+			if f.Sequence > 0 && fi.SequenceNo() <= f.Sequence {
+				panic(fmt.Sprintln("non-increasing sequence, current:", fi.SequenceNo(), "<= previous:", f.Sequence))
+			}
 		}
 
 		f = fi.(protocol.FileInfo)
@@ -1783,8 +1785,6 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 			return true
 		}
 
-		l.Debugln("Batching", folder, f)
-
 		batch.append(f)
 		return true
 	})
@@ -1799,7 +1799,6 @@ func sendIndexTo(prevSequence int64, conn protocol.Connection, folder string, fs
 		return prevSequence, err
 	}
 
-	l.Debugf("New %s sequence number is %d", folder, f.Sequence)
 	return f.Sequence, err
 }
 

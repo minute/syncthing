@@ -140,40 +140,49 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
-	if device == protocol.LocalDeviceID {
-		discards := make([]protocol.FileInfo, 0, len(fs))
-		updates := make([]protocol.FileInfo, 0, len(fs))
-		// db.UpdateFiles will sort unchanged files out -> save one db lookup
-		// filter slice according to https://github.com/golang/go/wiki/SliceTricks#filtering-without-allocating
-		oldFs := fs
-		fs = fs[:0]
-		var dk []byte
-		folder := []byte(s.folder)
-		for _, nf := range oldFs {
-			dk = s.db.deviceKeyInto(dk, folder, device[:], []byte(osutil.NormalizedFilename(nf.Name)))
-			ef, ok := s.db.getFile(dk)
-			if ok && ef.Version.Equal(nf.Version) && ef.IsInvalid() == nf.IsInvalid() {
-				continue
-			}
+	defer s.meta.toDB(s.db, []byte(s.folder))
 
-			nf.Sequence = s.meta.nextSeq(protocol.LocalDeviceID)
-			fs = append(fs, nf)
-
-			if ok {
-				discards = append(discards, ef)
-			}
-			updates = append(updates, nf)
-		}
-		s.blockmap.Discard(discards)
-		s.db.removeSequences(folder, discards)
+	if device != protocol.LocalDeviceID {
+		// Easy case, just update the files and we're done.
 		s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
-		s.db.addSequences(folder, updates)
-		s.blockmap.Update(updates)
-	} else {
-		s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
+		return
 	}
 
-	s.meta.toDB(s.db, []byte(s.folder))
+	// For the local device we have a bunch of metadata to track however...
+
+	discards := make([]protocol.FileInfo, 0, len(fs))
+	updates := make([]protocol.FileInfo, 0, len(fs))
+	// db.UpdateFiles will sort unchanged files out -> save one db lookup
+	// filter slice according to https://github.com/golang/go/wiki/SliceTricks#filtering-without-allocating
+	oldFs := fs
+	fs = fs[:0]
+	var dk []byte
+	folder := []byte(s.folder)
+	for _, nf := range oldFs {
+		dk = s.db.deviceKeyInto(dk, folder, device[:], []byte(osutil.NormalizedFilename(nf.Name)))
+		ef, ok := s.db.getFile(dk)
+		if ok && ef.Version.Equal(nf.Version) && ef.IsInvalid() == nf.IsInvalid() {
+			continue
+		}
+
+		nf.Sequence = s.meta.nextSeq(protocol.LocalDeviceID)
+		fs = append(fs, nf)
+
+		if ok {
+			discards = append(discards, ef)
+		}
+		updates = append(updates, nf)
+	}
+
+	// The ordering here is important. We first remove stuff that point
+	// to files we are going to update, then update them, then add new
+	// index pointers etc.
+
+	s.blockmap.Discard(discards)
+	s.db.removeSequences(folder, discards)
+	s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
+	s.db.addSequences(folder, updates)
+	s.blockmap.Update(updates)
 }
 
 func (s *FileSet) WithNeed(device protocol.DeviceID, fn Iterator) {
