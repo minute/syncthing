@@ -93,7 +93,7 @@ func NewFileSet(folder string, fs fs.Filesystem, db *Instance) *FileSet {
 func (s *FileSet) recalcCounts() {
 	s.meta = newMetadataTracker()
 
-	s.db.tm.inReadTransaction(func(t transaction) error {
+	s.db.tm.inWriteTransaction(func(t transaction) error {
 		s.db.checkGlobals(t, []byte(s.folder), s.meta)
 
 		var deviceID protocol.DeviceID
@@ -191,6 +191,7 @@ func (s *FileSet) WithNeed(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithNeed(%v)", s.folder, device)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withNeed(t, []byte(s.folder), device[:], false, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -198,6 +199,7 @@ func (s *FileSet) WithNeedTruncated(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithNeedTruncated(%v)", s.folder, device)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withNeed(t, []byte(s.folder), device[:], true, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -205,6 +207,7 @@ func (s *FileSet) WithHave(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithHave(%v)", s.folder, device)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withHave(t, []byte(s.folder), device[:], nil, false, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -212,6 +215,7 @@ func (s *FileSet) WithHaveTruncated(device protocol.DeviceID, fn Iterator) {
 	l.Debugf("%s WithHaveTruncated(%v)", s.folder, device)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withHave(t, []byte(s.folder), device[:], nil, true, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -219,6 +223,7 @@ func (s *FileSet) WithHaveSequence(startSeq int64, fn Iterator) {
 	l.Debugf("%s WithHaveSequence(%v)", s.folder, startSeq)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withHaveSequence(t, []byte(s.folder), startSeq, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -228,6 +233,7 @@ func (s *FileSet) WithPrefixedHaveTruncated(device protocol.DeviceID, prefix str
 	l.Debugf(`%s WithPrefixedHaveTruncated(%v, "%v")`, s.folder, device, prefix)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withHave(t, []byte(s.folder), device[:], []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -235,6 +241,7 @@ func (s *FileSet) WithGlobal(fn Iterator) {
 	l.Debugf("%s WithGlobal()", s.folder)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withGlobal(t, []byte(s.folder), nil, false, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -242,6 +249,7 @@ func (s *FileSet) WithGlobalTruncated(fn Iterator) {
 	l.Debugf("%s WithGlobalTruncated()", s.folder)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withGlobal(t, []byte(s.folder), nil, true, nativeFileIterator(fn))
+		return nil
 	})
 }
 
@@ -251,17 +259,28 @@ func (s *FileSet) WithPrefixedGlobalTruncated(prefix string, fn Iterator) {
 	l.Debugf(`%s WithPrefixedGlobalTruncated("%v")`, s.folder, prefix)
 	s.db.tm.inReadTransaction(func(t transaction) error {
 		s.db.withGlobal(t, []byte(s.folder), []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
+		return nil
 	})
 }
 
 func (s *FileSet) Get(device protocol.DeviceID, file string) (protocol.FileInfo, bool) {
-	f, ok := s.db.getFile(s.db.deviceKey([]byte(s.folder), device[:], []byte(osutil.NormalizedFilename(file))))
+	var f protocol.FileInfo
+	var ok bool
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		f, ok = s.db.getFile(t, []byte(s.folder), device[:], []byte(osutil.NormalizedFilename(file)))
+		return nil
+	})
 	f.Name = osutil.NativeFilename(f.Name)
 	return f, ok
 }
 
 func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
-	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), false)
+	var fi FileIntf
+	var ok bool
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		fi, ok = s.db.getGlobal(t, []byte(s.folder), []byte(osutil.NormalizedFilename(file)), false)
+		return nil
+	})
 	if !ok {
 		return protocol.FileInfo{}, false
 	}
@@ -271,7 +290,12 @@ func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
 }
 
 func (s *FileSet) GetGlobalTruncated(file string) (FileInfoTruncated, bool) {
-	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), true)
+	var fi FileIntf
+	var ok bool
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		fi, ok = s.db.getGlobal(t, []byte(s.folder), []byte(osutil.NormalizedFilename(file)), true)
+		return nil
+	})
 	if !ok {
 		return FileInfoTruncated{}, false
 	}
@@ -281,7 +305,12 @@ func (s *FileSet) GetGlobalTruncated(file string) (FileInfoTruncated, bool) {
 }
 
 func (s *FileSet) Availability(file string) []protocol.DeviceID {
-	return s.db.availability([]byte(s.folder), []byte(osutil.NormalizedFilename(file)))
+	var res []protocol.DeviceID
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		res = s.db.availability(t, []byte(s.folder), []byte(osutil.NormalizedFilename(file)))
+		return nil
+	})
+	return res
 }
 
 func (s *FileSet) Sequence(device protocol.DeviceID) int64 {
@@ -305,12 +334,16 @@ func (s *FileSet) GlobalSize() Counts {
 }
 
 func (s *FileSet) IndexID(device protocol.DeviceID) protocol.IndexID {
-	id := s.db.getIndexID(device[:], []byte(s.folder))
-	if id == 0 && device == protocol.LocalDeviceID {
-		// No index ID set yet. We create one now.
-		id = protocol.NewIndexID()
-		s.db.setIndexID(device[:], []byte(s.folder), id)
-	}
+	var id protocol.IndexID
+	s.db.tm.inWriteTransaction(func(t transaction) error {
+		id := s.db.getIndexID(t, device[:], []byte(s.folder))
+		if id == 0 && device == protocol.LocalDeviceID {
+			// No index ID set yet. We create one now.
+			id = protocol.NewIndexID()
+			s.db.setIndexID(t, device[:], []byte(s.folder), id)
+		}
+		return nil
+	})
 	return id
 }
 
@@ -318,12 +351,20 @@ func (s *FileSet) SetIndexID(device protocol.DeviceID, id protocol.IndexID) {
 	if device == protocol.LocalDeviceID {
 		panic("do not explicitly set index ID for local device")
 	}
-	s.db.setIndexID(device[:], []byte(s.folder), id)
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		s.db.setIndexID(t, device[:], []byte(s.folder), id)
+		return nil
+	})
 }
 
 func (s *FileSet) MtimeFS() *fs.MtimeFS {
-	prefix := s.db.mtimesKey([]byte(s.folder))
-	kv := NewNamespacedKV(s.db, string(prefix))
+	var prefix []byte
+	var kv *NamespacedKV
+	s.db.tm.withoutTransaction(func(t transaction) error {
+		prefix = s.db.mtimesKey(t, []byte(s.folder))
+		kv = NewNamespacedKV(t, string(prefix))
+		return nil
+	})
 	return fs.NewMtimeFS(s.fs, kv)
 }
 
@@ -334,14 +375,16 @@ func (s *FileSet) ListDevices() []protocol.DeviceID {
 // DropFolder clears out all information related to the given folder from the
 // database.
 func DropFolder(db *Instance, folder string) {
-	db.dropFolder([]byte(folder))
-	db.dropMtimes([]byte(folder))
-	db.dropFolderMeta([]byte(folder))
-	bm := &BlockMap{
-		db:     db,
-		folder: db.folderIdx.ID([]byte(folder)),
-	}
-	bm.Drop()
+	db.tm.inWriteTransaction(func(t transaction) error {
+		db.dropFolder(t, []byte(folder))
+		db.dropMtimes(t, []byte(folder))
+		db.dropFolderMeta(t, []byte(folder))
+		bm := &BlockMap{
+			folder: db.folderIdx.ID(t, []byte(folder)),
+		}
+		bm.Drop(t)
+		return nil
+	})
 }
 
 func normalizeFilenames(fs []protocol.FileInfo) {

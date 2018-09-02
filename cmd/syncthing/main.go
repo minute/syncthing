@@ -730,7 +730,7 @@ func syncthingMain(runtimeOptions RuntimeOptions) {
 
 	// Grab the previously running version string from the database.
 
-	miscDB := db.NewNamespacedKV(ldb, string(db.KeyTypeMiscData))
+	miscDB := ldb.NewNamespacedKV(string(db.KeyTypeMiscData))
 	prevVersion, _ := miscDB.String("prevVersion")
 
 	// Strip away prerelease/beta stuff and just compare the release

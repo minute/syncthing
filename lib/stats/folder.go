@@ -31,7 +31,7 @@ type LastFile struct {
 func NewFolderStatisticsReference(ldb *db.Instance, folder string) *FolderStatisticsReference {
 	prefix := string(db.KeyTypeFolderStatistic) + folder
 	return &FolderStatisticsReference{
-		ns:     db.NewNamespacedKV(ldb, prefix),
+		ns:     ldb.NewNamespacedKV(prefix),
 		folder: folder,
 	}
 }

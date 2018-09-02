@@ -13,7 +13,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync/atomic"
 
 	"github.com/syncthing/syncthing/lib/protocol"
 	"github.com/syncthing/syncthing/lib/sync"
@@ -89,14 +88,18 @@ func newDBInstance(db *leveldb.DB, location string) (*Instance, error) {
 	return i, err
 }
 
-// Committed returns the number of items committed to the database since startup
-func (db *Instance) Committed() int64 {
-	return atomic.LoadInt64(&db.committed)
-}
-
 // Location returns the filesystem path where the database is stored
 func (db *Instance) Location() string {
 	return db.location
+}
+
+func (db *Instance) NewNamespacedKV(prefix string) *NamespacedKV {
+	var kv *NamespacedKV
+	db.tm.withoutTransaction(func(t transaction) error {
+		kv = NewNamespacedKV(t, prefix)
+		return nil
+	})
+	return kv
 }
 
 func (db *Instance) updateFiles(t transaction, folder, device []byte, fs []protocol.FileInfo, meta *metadataTracker) {
@@ -471,6 +474,8 @@ func (db *Instance) ListFolders() []string {
 		for k := range folderExists {
 			folders = append(folders, k)
 		}
+
+		return nil
 	})
 
 	sort.Strings(folders)
@@ -713,6 +718,7 @@ func (db *Instance) folderMetaKey(w writer, folder []byte) []byte {
 func (db *Instance) DropLocalDeltaIndexIDs() {
 	db.tm.withoutTransaction(func(t transaction) error {
 		db.dropDeltaIndexIDs(t, true)
+		return nil
 	})
 }
 
@@ -722,6 +728,7 @@ func (db *Instance) DropLocalDeltaIndexIDs() {
 func (db *Instance) DropRemoteDeltaIndexIDs() {
 	db.tm.withoutTransaction(func(t transaction) error {
 		db.dropDeltaIndexIDs(t, false)
+		return nil
 	})
 }
 

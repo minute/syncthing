@@ -139,23 +139,29 @@ func (f *BlockFinder) String() string {
 // they are happy with the block) or false to continue iterating for whatever
 // reason. The iterator finally returns the result, whether or not a
 // satisfying block was eventually found.
-func (f *BlockFinder) Iterate(t transaction, folders []string, hash []byte, iterFn func(string, string, int32) bool) bool {
+func (f *BlockFinder) Iterate(folders []string, hash []byte, iterFn func(string, string, int32) bool) bool {
 	var key []byte
-	for _, folder := range folders {
-		folderID := f.db.folderIdx.ID(t, []byte(folder))
-		key = blockKeyInto(key, hash, folderID, "")
-		iter := t.NewIterator(util.BytesPrefix(key), nil)
-		defer iter.Release()
+	found := false
+	f.db.tm.withoutTransaction(func(t transaction) error {
+	outer:
+		for _, folder := range folders {
+			folderID := f.db.folderIdx.ID(t, []byte(folder))
+			key = blockKeyInto(key, hash, folderID, "")
+			iter := t.NewIterator(util.BytesPrefix(key), nil)
+			defer iter.Release()
 
-		for iter.Next() && iter.Error() == nil {
-			file := blockKeyName(iter.Key())
-			index := int32(binary.BigEndian.Uint32(iter.Value()))
-			if iterFn(folder, osutil.NativeFilename(file), index) {
-				return true
+			for iter.Next() && iter.Error() == nil {
+				file := blockKeyName(iter.Key())
+				index := int32(binary.BigEndian.Uint32(iter.Value()))
+				if iterFn(folder, osutil.NativeFilename(file), index) {
+					found = true
+					break outer
+				}
 			}
 		}
-	}
-	return false
+		return nil
+	})
+	return found
 }
 
 // m.blockKey returns a byte slice encoding the following information:

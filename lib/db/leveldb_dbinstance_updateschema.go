@@ -39,7 +39,7 @@ func (e databaseDowngradeError) Error() string {
 }
 
 func (db *Instance) updateSchema(t transaction) error {
-	miscDB := NewNamespacedKV(db, string(KeyTypeMiscData))
+	miscDB := NewNamespacedKV(t, string(KeyTypeMiscData))
 	prevVersion, _ := miscDB.Int64("dbVersion")
 
 	if prevVersion > dbVersion {
