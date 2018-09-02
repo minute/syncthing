@@ -102,6 +102,10 @@ func (db *Instance) NewNamespacedKV(prefix string) *NamespacedKV {
 	return kv
 }
 
+func (db *Instance) InTransaction(fn func(t transaction) error) error {
+	return db.tm.inWriteTransaction(fn)
+}
+
 func (db *Instance) updateFiles(t transaction, folder, device []byte, fs []protocol.FileInfo, meta *metadataTracker) {
 	var fk []byte
 	var gk []byte
