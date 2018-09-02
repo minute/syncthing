@@ -165,12 +165,14 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 			updates = append(updates, nf)
 		}
 		s.blockmap.Discard(discards)
-		s.blockmap.Update(updates)
 		s.db.removeSequences(folder, discards)
+		s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
 		s.db.addSequences(folder, updates)
+		s.blockmap.Update(updates)
+	} else {
+		s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
 	}
 
-	s.db.updateFiles([]byte(s.folder), device[:], fs, s.meta)
 	s.meta.toDB(s.db, []byte(s.folder))
 }
 
