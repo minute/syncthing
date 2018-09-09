@@ -119,6 +119,7 @@ type report struct {
 	NumCPU     int
 	FolderUses struct {
 		ReadOnly            int
+		RecvOnly            int
 		IgnorePerms         int
 		IgnoreDelete        int
 		AutoNormalize       int
@@ -314,6 +315,9 @@ func (r *report) FieldPointers() []interface{} {
 		// V3 added late in the RC
 		&r.WeakHashEnabled,
 		&r.Address,
+
+		// Receive only folders
+		&r.FolderUses.RecvOnly,
 	}
 }
 
@@ -434,6 +438,9 @@ func (r *report) FieldNames() []string {
 		// V3 added late in the RC
 		"WeakHashEnabled",
 		"Address",
+
+		// Receive only folders
+		"FolderRecvOnly",
 	}
 }
 
@@ -615,6 +622,19 @@ func setupDB(db *sql.DB) error {
 		_, err = db.Exec(`ALTER TABLE Reports
 		ADD COLUMN WeakHashEnabled BOOLEAN NOT NULL DEFAULT FALSE
 		ADD COLUMN Address VARCHAR(45) NOT NULL DEFAULT ''
+		`)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Receive only added ad-hoc
+
+	row = db.QueryRow(`SELECT attname FROM pg_attribute WHERE attrelid = (SELECT oid FROM pg_class WHERE relname = 'reports') AND attname = 'folderrecvonly'`)
+	if err := row.Scan(&t); err != nil {
+		// The RecvOnly column doesn't exist; add it.
+		_, err = db.Exec(`ALTER TABLE Reports
+		ADD COLUMN FolderRecvOnly INTEGER NOT NULL DEFAULT 0
 		`)
 		if err != nil {
 			return err
@@ -1099,6 +1119,7 @@ func getReport(db *sql.DB) map[string]interface{} {
 			inc(features["Folder"]["v2"], "Ignore deletes", rep.FolderUses.IgnoreDelete)
 			inc(features["Folder"]["v2"], "Ignore permissions", rep.FolderUses.IgnorePerms)
 			inc(features["Folder"]["v2"], "Mode, send-only", rep.FolderUses.ReadOnly)
+			inc(features["Folder"]["v2"], "Mode, recv-only", rep.FolderUses.RecvOnly)
 
 			add(featureGroups["Folder"]["v2"], "Versioning", "Simple", rep.FolderUses.SimpleVersioning)
 			add(featureGroups["Folder"]["v2"], "Versioning", "External", rep.FolderUses.ExternalVersioning)
