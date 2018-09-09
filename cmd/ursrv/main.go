@@ -118,8 +118,8 @@ type report struct {
 	URVersion  int
 	NumCPU     int
 	FolderUses struct {
-		ReadOnly            int
-		RecvOnly            int
+		SendOnly            int
+		ReceiveOnly         int
 		IgnorePerms         int
 		IgnoreDelete        int
 		AutoNormalize       int
@@ -264,7 +264,7 @@ func (r *report) FieldPointers() []interface{} {
 		&r.TotMiB, &r.FolderMaxMiB, &r.MemoryUsageMiB, &r.SHA256Perf,
 		&r.MemorySize, &r.Date,
 		// V2
-		&r.URVersion, &r.NumCPU, &r.FolderUses.ReadOnly, &r.FolderUses.IgnorePerms,
+		&r.URVersion, &r.NumCPU, &r.FolderUses.SendOnly, &r.FolderUses.IgnorePerms,
 		&r.FolderUses.IgnoreDelete, &r.FolderUses.AutoNormalize, &r.DeviceUses.Introducer,
 		&r.DeviceUses.CustomCertName, &r.DeviceUses.CompressAlways,
 		&r.DeviceUses.CompressMetadata, &r.DeviceUses.CompressNever,
@@ -317,7 +317,7 @@ func (r *report) FieldPointers() []interface{} {
 		&r.Address,
 
 		// Receive only folders
-		&r.FolderUses.RecvOnly,
+		&r.FolderUses.ReceiveOnly,
 	}
 }
 
@@ -1118,8 +1118,8 @@ func getReport(db *sql.DB) map[string]interface{} {
 			inc(features["Folder"]["v2"], "Automatic normalization", rep.FolderUses.AutoNormalize)
 			inc(features["Folder"]["v2"], "Ignore deletes", rep.FolderUses.IgnoreDelete)
 			inc(features["Folder"]["v2"], "Ignore permissions", rep.FolderUses.IgnorePerms)
-			inc(features["Folder"]["v2"], "Mode, send-only", rep.FolderUses.ReadOnly)
-			inc(features["Folder"]["v2"], "Mode, recv-only", rep.FolderUses.RecvOnly)
+			inc(features["Folder"]["v2"], "Mode, send only", rep.FolderUses.SendOnly)
+			inc(features["Folder"]["v2"], "Mode, receive only", rep.FolderUses.ReceiveOnly)
 
 			add(featureGroups["Folder"]["v2"], "Versioning", "Simple", rep.FolderUses.SimpleVersioning)
 			add(featureGroups["Folder"]["v2"], "Versioning", "External", rep.FolderUses.ExternalVersioning)
