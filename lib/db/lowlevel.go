@@ -42,6 +42,7 @@ func Open(location string) (*Lowlevel, error) {
 	opts := &opt.Options{
 		OpenFilesCacheCapacity: dbMaxOpenFiles,
 		WriteBuffer:            dbWriteBuffer,
+		NoSync:                 os.Getenv("STFSYNC") == "",
 	}
 
 	db, err := leveldb.OpenFile(location, opts)

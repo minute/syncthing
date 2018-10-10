@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"os"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -1625,17 +1626,21 @@ func (f *sendReceiveFolder) dbUpdaterRoutine(dbUpdateChan <-chan dbUpdateJob) {
 		}
 
 		// sync directories
-		for dir := range changedDirs {
-			delete(changedDirs, dir)
-			fd, err := f.fs.Open(dir)
-			if err != nil {
-				l.Debugf("fsync %q failed: %v", dir, err)
-				continue
+		if os.Getenv("STFSYNC") != "" {
+			for dir := range changedDirs {
+				delete(changedDirs, dir)
+				fd, err := f.fs.Open(dir)
+				if err != nil {
+					l.Debugf("fsync %q failed: %v", dir, err)
+					continue
+				}
+				if err := fd.Sync(); err != nil {
+					l.Debugf("fsync %q failed: %v", dir, err)
+				}
+				fd.Close()
 			}
-			if err := fd.Sync(); err != nil {
-				l.Debugf("fsync %q failed: %v", dir, err)
-			}
-			fd.Close()
+		} else {
+			changedDirs = make(map[string]struct{})
 		}
 
 		// All updates to file/folder objects that originated remotely

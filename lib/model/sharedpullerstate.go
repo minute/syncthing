@@ -9,6 +9,7 @@ package model
 import (
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"time"
 
@@ -281,8 +282,10 @@ func (s *sharedPullerState) finalClose() (bool, error) {
 	if s.fd != nil {
 		// This is our error if we weren't errored before. Otherwise we
 		// keep the earlier error.
-		if fsyncErr := s.fd.Sync(); fsyncErr != nil && s.err == nil {
-			s.err = fsyncErr
+		if os.Getenv("STFSYNC") != "" {
+			if fsyncErr := s.fd.Sync(); fsyncErr != nil && s.err == nil {
+				s.err = fsyncErr
+			}
 		}
 		if closeErr := s.fd.Close(); closeErr != nil && s.err == nil {
 			s.err = closeErr
