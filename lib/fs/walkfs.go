@@ -10,15 +10,18 @@
 
 package fs
 
-import "path/filepath"
+import (
+	"path/filepath"
+	"sort"
+)
 
-// WalkFunc is the type of the function called for each file or directory
+// WalkFunc is the type of the function called for each directory
 // visited by Walk. The path argument contains the argument to Walk as a
 // prefix; that is, if Walk is called with "dir", which is a directory
 // containing the file "a", the walk function will be called with argument
-// "dir/a". The info argument is the FileInfo for the named path.
+// "dir/a". The infos argument is the list of FileInfos in the named path.
 //
-// If there was a problem walking to the file or directory named by path, the
+// If there was a problem walking the directory named by path, the
 // incoming error will describe the problem and the function can decide how
 // to handle that error (and Walk will not descend into that directory). If
 // an error is returned, processing stops. The sole exception is when the function
@@ -26,7 +29,7 @@ import "path/filepath"
 // on a directory, Walk skips the directory's contents entirely.
 // If the function returns SkipDir when invoked on a non-directory file,
 // Walk skips the remaining files in the containing directory.
-type WalkFunc func(path string, info FileInfo, err error) error
+type WalkFunc func(path string, infos []FileInfo, err error) error
 
 type walkFilesystem struct {
 	Filesystem
@@ -37,58 +40,51 @@ func NewWalkFilesystem(next Filesystem) Filesystem {
 }
 
 // walk recursively descends path, calling walkFn.
-func (f *walkFilesystem) walk(path string, info FileInfo, walkFn WalkFunc) error {
+func (f *walkFilesystem) walk(path string, walkFn WalkFunc) error {
 	path, err := Canonicalize(path)
 	if err != nil {
 		return err
 	}
 
-	err = walkFn(path, info, nil)
+	names, err := f.DirNames(path)
 	if err != nil {
-		if info.IsDir() && err == SkipDir {
-			return nil
+		return walkFn(path, nil, err)
+	}
+
+	sort.Strings(names)
+
+	infos := make([]FileInfo, len(names))
+	for i, name := range names {
+		info, err := f.Lstat(filepath.Join(path, name))
+		if err != nil {
+			// ???
+			continue
 		}
+		infos[i] = info
+	}
+
+	if err := walkFn(path, infos, nil); err != nil {
 		return err
 	}
 
-	if !info.IsDir() && path != "." {
-		return nil
-	}
-
-	names, err := f.DirNames(path)
-	if err != nil {
-		return walkFn(path, info, err)
-	}
-
-	for _, name := range names {
-		filename := filepath.Join(path, name)
-		fileInfo, err := f.Lstat(filename)
-		if err != nil {
-			if err := walkFn(filename, fileInfo, err); err != nil && err != SkipDir {
-				return err
-			}
-		} else {
-			err = f.walk(filename, fileInfo, walkFn)
-			if err != nil {
-				if !fileInfo.IsDir() || err != SkipDir {
-					return err
-				}
-			}
+	for _, info := range infos {
+		if !info.IsDir() {
+			continue
+		}
+		if err := f.walk(filepath.Join(path, info.Name()), walkFn); err != nil && err != SkipDir {
+			return err
 		}
 	}
+
 	return nil
 }
 
-// Walk walks the file tree rooted at root, calling walkFn for each file or
+// Walk walks the file tree rooted at root, calling walkFn for each
 // directory in the tree, including root. All errors that arise visiting files
 // and directories are filtered by walkFn. The files are walked in lexical
 // order, which makes the output deterministic but means that for very
 // large directories Walk can be inefficient.
 // Walk does not follow symbolic links.
 func (f *walkFilesystem) Walk(root string, walkFn WalkFunc) error {
-	info, err := f.Lstat(root)
-	if err != nil {
-		return walkFn(root, nil, err)
-	}
-	return f.walk(root, info, walkFn)
+	return f.walk(root, walkFn)
 }
