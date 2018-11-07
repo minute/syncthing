@@ -42,7 +42,6 @@ var (
 	goVersion     float64
 	race          bool
 	debug         = os.Getenv("BUILDDEBUG") != ""
-	noBuildGopath bool
 	extraTags     string
 	installSuffix string
 	pkgdir        string
@@ -216,38 +215,13 @@ func main() {
 		}()
 	}
 
-	if gopath := gopath(); gopath == "" {
-		gopath, err := temporaryBuildDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		os.Setenv("GOPATH", gopath)
-		log.Println("GOPATH is", gopath)
-		if !noBuildGopath {
-			if err := buildGOPATH(gopath); err != nil {
-				log.Fatal(err)
-			}
-			lazyRebuildAssets()
-		}
+	if gp := gopath(); gp == "" {
+		log.Println("No GOPATH? Might not find all required tools.")
 	} else {
-		inside := false
-		wd, _ := os.Getwd()
-		wd, _ = filepath.EvalSymlinks(wd)
-		for _, p := range filepath.SplitList(gopath) {
-			p, _ = filepath.EvalSymlinks(p)
-			if filepath.Join(p, "src/github.com/syncthing/syncthing") == wd {
-				inside = true
-				break
-			}
-		}
-		if !inside {
-			fmt.Println("You seem to have GOPATH set but the Syncthing source not placed correctly within it, which may cause problems.")
-		}
+		// Set path to $GOPATH/bin:$PATH so that we can for sure find tools we
+		// might have installed during "build.go setup".
+		os.Setenv("PATH", fmt.Sprintf("%s%cbin%c%s", gp, os.PathSeparator, os.PathListSeparator, os.Getenv("PATH")))
 	}
-
-	// Set path to $GOPATH/bin:$PATH so that we can for sure find tools we
-	// might have installed during "build.go setup".
-	os.Setenv("PATH", fmt.Sprintf("%s%cbin%c%s", os.Getenv("GOPATH"), os.PathSeparator, os.PathListSeparator, os.Getenv("PATH")))
 
 	// Invoking build.go with no parameters at all builds everything (incrementally),
 	// which is what you want for maximum error checking during development.
@@ -337,13 +311,6 @@ func runCommand(cmd string, target target) {
 	case "version":
 		fmt.Println(getVersion())
 
-	case "gopath":
-		gopath, err := temporaryBuildDir()
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(gopath)
-
 	default:
 		log.Fatalf("Unknown command %q", cmd)
 	}
@@ -355,7 +322,6 @@ func parseFlags() {
 	flag.BoolVar(&noupgrade, "no-upgrade", noupgrade, "Disable upgrade functionality")
 	flag.StringVar(&version, "version", getVersion(), "Set compiled in version string")
 	flag.BoolVar(&race, "race", race, "Use race detector")
-	flag.BoolVar(&noBuildGopath, "no-build-gopath", noBuildGopath, "Don't build GOPATH, assume it's OK")
 	flag.StringVar(&extraTags, "tags", extraTags, "Extra tags, space separated")
 	flag.StringVar(&installSuffix, "installsuffix", installSuffix, "Install suffix, optional")
 	flag.StringVar(&pkgdir, "pkgdir", "", "Set -pkgdir parameter for `go build`")
@@ -808,7 +774,6 @@ func transifex() {
 
 func clean() {
 	rmr("bin")
-	rmr(filepath.Join(os.Getenv("GOPATH"), fmt.Sprintf("pkg/%s_%s/github.com/syncthing", goos, goarch)))
 }
 
 func ldflags() string {
@@ -1268,67 +1233,6 @@ func temporaryBuildDir() (string, error) {
 	return filepath.Join(tmpDir, base), nil
 }
 
-func buildGOPATH(gopath string) error {
-	pkg := filepath.Join(gopath, "src/github.com/syncthing/syncthing")
-	dirs := []string{"cmd", "gui", "lib", "meta", "script", "test", "vendor"}
-
-	if debug {
-		t0 := time.Now()
-		log.Println("build temporary GOPATH in", gopath)
-		defer func() {
-			log.Println("... in", time.Since(t0))
-		}()
-	}
-
-	// Walk the sources and copy the files into the temporary GOPATH.
-	// Remember which files are supposed to be present so we can clean
-	// out everything else in the next step. The copyFile() step will
-	// only actually copy the file if it doesn't exist or the contents
-	// differ.
-
-	exists := map[string]struct{}{}
-	for _, dir := range dirs {
-		err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return nil
-			}
-
-			dst := filepath.Join(pkg, path)
-			exists[dst] = struct{}{}
-
-			if err := copyFile(path, dst, info.Mode()); err != nil {
-				return err
-			}
-
-			return nil
-		})
-		if err != nil {
-			return err
-		}
-	}
-
-	// Walk the temporary GOPATH and remove any files that we wouldn't
-	// have copied there in the previous step.
-
-	filepath.Walk(pkg, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		if _, ok := exists[path]; !ok {
-			os.Remove(path)
-		}
-		return nil
-	})
-
-	return nil
-}
-
 func gopath() string {
 	if gopath := os.Getenv("GOPATH"); gopath != "" {
 		// The env var is set, use that.
@@ -1340,16 +1244,7 @@ func gopath() string {
 	if err != nil {
 		return ""
 	}
-
-	// We got something. Check if we are in fact available in that location.
-	gopath := string(bs)
-	if _, err := os.Stat(filepath.Join(gopath, "src/github.com/syncthing/syncthing/build.go")); err == nil {
-		// That seems to be the gopath.
-		return gopath
-	}
-
-	// The gopath is not valid.
-	return ""
+	return string(bs)
 }
 
 func (t target) BinaryName() string {
