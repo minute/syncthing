@@ -46,7 +46,7 @@ require (
 	github.com/sasha-s/go-deadlock v0.2.0
 	github.com/sirupsen/logrus v1.0.4
 	github.com/stathat/go v1.0.0
-	github.com/syncthing/notify v0.0.0-20181011115013-116c45bb5ad4
+	github.com/syncthing/notify v0.0.0-20181107104724-4e389ea6c0d8
 	github.com/syndtr/goleveldb v0.0.0-20171214120811-34011bf325bc
 	github.com/templexxx/cpufeat v0.0.0-20170927014610-3794dfbfb047
 	github.com/thejerf/suture v0.0.0-20180907184608-bf6ee6a0b047
@@ -54,7 +54,7 @@ require (
 	github.com/vitrun/qart v0.0.0-20160531060029-bf64b92db6b0
 	golang.org/x/crypto v0.0.0-20171231215028-0fcca4842a8d
 	golang.org/x/net v0.0.0-20171212005608-d866cfc389ce
-	golang.org/x/sys v0.0.0-20171222143536-83801418e1b5
+	golang.org/x/sys v0.0.0-20181106135930-3a76605856fd
 	golang.org/x/text v0.0.0-20171227012246-e19ae1496984
 	golang.org/x/time v0.0.0-20170927054726-6dc17368e09b
 	gopkg.in/asn1-ber.v1 v1.0.0-20170511165959-379148ca0225
