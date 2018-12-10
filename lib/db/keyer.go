@@ -21,14 +21,14 @@ const (
 )
 
 const (
-	// KeyTypeDevice <int32 folder ID> <int32 device ID> <file name> = FileInfo
-	KeyTypeDevice = 0
+	// KeyTypeDevice <int32 folder ID> <int32 device ID> <int64 file ID> = FileInfo
+	KeyTypeDevice = 14
 
-	// KeyTypeGlobal <int32 folder ID> <file name> = VersionList
-	KeyTypeGlobal = 1
+	// KeyTypeGlobal <int32 folder ID> <int64 file ID> = VersionList
+	KeyTypeGlobal = 15
 
-	// KeyTypeBlock <int32 folder ID> <32 bytes hash> <§file name> = int32 (block index)
-	KeyTypeBlock = 2
+	// KeyTypeBlock <int32 folder ID> <32 bytes hash> <int64 file ID> = int32 (block index)
+	KeyTypeBlock = 16
 
 	// KeyTypeDeviceStatistic <device ID as string> <some string> = some value
 	KeyTypeDeviceStatistic = 3
@@ -54,11 +54,22 @@ const (
 	// KeyTypeMiscData <some string> = some value
 	KeyTypeMiscData = 10
 
-	// KeyTypeSequence <int32 folder ID> <int64 sequence number> = KeyTypeDevice key
-	KeyTypeSequence = 11
+	// KeyTypeSequence <int32 folder ID> <int64 sequence number> = int64 file ID
+	KeyTypeSequence = 17
 
-	// KeyTypeNeed <int32 folder ID> <file name> = <nothing>
-	KeyTypeNeed = 12
+	// KeyTypeNeed <int32 folder ID> <int64 file ID> = <nothing>
+	KeyTypeNeed = 18
+
+	// KeyTypeFiles <int32 folder ID> <lowercase filename> = dbFileReference
+	KeyTypeFiles = 13
+	// message dbFileReference {
+	// 	int64 id = 1;
+	// 	message Entry {
+	// 		int64 id = 1;
+	// 		string name = 2;
+	// 	}
+	// 	repeated Entry disambiguation = 2;
+	// }
 )
 
 type keyer interface {
