@@ -31,7 +31,8 @@ type FileSet struct {
 	blockmap *BlockMap
 	meta     *metadataTracker
 
-	updateMutex sync.Mutex // protects database updates and the corresponding metadata changes
+	updateMutex      sync.Mutex // protects database updates and the corresponding metadata changes
+	localDeviceMutex sync.RWMutex
 }
 
 // FileIntf is the set of methods implemented by both protocol.FileInfo and
@@ -72,12 +73,13 @@ func NewFileSet(folder string, fs fs.Filesystem, ll *Lowlevel) *FileSet {
 	db := newInstance(ll)
 
 	var s = FileSet{
-		folder:      folder,
-		fs:          fs,
-		db:          db,
-		blockmap:    NewBlockMap(ll, folder),
-		meta:        newMetadataTracker(),
-		updateMutex: sync.NewMutex(),
+		folder:           folder,
+		fs:               fs,
+		db:               db,
+		blockmap:         NewBlockMap(ll, folder),
+		meta:             newMetadataTracker(),
+		updateMutex:      sync.NewMutex(),
+		localDeviceMutex: sync.NewRWMutex(),
 	}
 
 	if err := s.meta.fromDB(db, []byte(folder)); err != nil {
@@ -110,6 +112,11 @@ func (s *FileSet) recalcCounts() {
 func (s *FileSet) Drop(device protocol.DeviceID) {
 	l.Debugf("%s Drop(%v)", s.folder, device)
 
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.Lock()
+		defer s.localDeviceMutex.Unlock()
+	}
+
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
 
@@ -141,6 +148,11 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 	fs = append([]protocol.FileInfo(nil), fs...)
 
 	normalizeFilenames(fs)
+
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.Lock()
+		defer s.localDeviceMutex.Unlock()
+	}
 
 	s.updateMutex.Lock()
 	defer s.updateMutex.Unlock()
@@ -198,26 +210,49 @@ func (s *FileSet) Update(device protocol.DeviceID, fs []protocol.FileInfo) {
 }
 
 func (s *FileSet) WithNeed(device protocol.DeviceID, fn Iterator) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	l.Debugf("%s WithNeed(%v)", s.folder, device)
 	s.db.withNeed([]byte(s.folder), device[:], false, nativeFileIterator(fn))
 }
 
 func (s *FileSet) WithNeedTruncated(device protocol.DeviceID, fn Iterator) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	l.Debugf("%s WithNeedTruncated(%v)", s.folder, device)
 	s.db.withNeed([]byte(s.folder), device[:], true, nativeFileIterator(fn))
 }
 
 func (s *FileSet) WithHave(device protocol.DeviceID, fn Iterator) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	l.Debugf("%s WithHave(%v)", s.folder, device)
 	s.db.withHave([]byte(s.folder), device[:], nil, false, nativeFileIterator(fn))
 }
 
 func (s *FileSet) WithHaveTruncated(device protocol.DeviceID, fn Iterator) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	l.Debugf("%s WithHaveTruncated(%v)", s.folder, device)
 	s.db.withHave([]byte(s.folder), device[:], nil, true, nativeFileIterator(fn))
 }
 
 func (s *FileSet) WithHaveSequence(startSeq int64, fn Iterator) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	l.Debugf("%s WithHaveSequence(%v)", s.folder, startSeq)
 	s.db.withHaveSequence([]byte(s.folder), startSeq, nativeFileIterator(fn))
 }
@@ -225,15 +260,27 @@ func (s *FileSet) WithHaveSequence(startSeq int64, fn Iterator) {
 // Except for an item with a path equal to prefix, only children of prefix are iterated.
 // E.g. for prefix "dir", "dir/file" is iterated, but "dir.file" is not.
 func (s *FileSet) WithPrefixedHaveTruncated(device protocol.DeviceID, prefix string, fn Iterator) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	l.Debugf(`%s WithPrefixedHaveTruncated(%v, "%v")`, s.folder, device, prefix)
 	s.db.withHave([]byte(s.folder), device[:], []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
 }
+
 func (s *FileSet) WithGlobal(fn Iterator) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	l.Debugf("%s WithGlobal()", s.folder)
 	s.db.withGlobal([]byte(s.folder), nil, false, nativeFileIterator(fn))
 }
 
 func (s *FileSet) WithGlobalTruncated(fn Iterator) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	l.Debugf("%s WithGlobalTruncated()", s.folder)
 	s.db.withGlobal([]byte(s.folder), nil, true, nativeFileIterator(fn))
 }
@@ -241,17 +288,28 @@ func (s *FileSet) WithGlobalTruncated(fn Iterator) {
 // Except for an item with a path equal to prefix, only children of prefix are iterated.
 // E.g. for prefix "dir", "dir/file" is iterated, but "dir.file" is not.
 func (s *FileSet) WithPrefixedGlobalTruncated(prefix string, fn Iterator) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	l.Debugf(`%s WithPrefixedGlobalTruncated("%v")`, s.folder, prefix)
 	s.db.withGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(prefix)), true, nativeFileIterator(fn))
 }
 
 func (s *FileSet) Get(device protocol.DeviceID, file string) (protocol.FileInfo, bool) {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	f, ok := s.db.getFile(s.db.keyer.GenerateDeviceFileKey(nil, []byte(s.folder), device[:], []byte(osutil.NormalizedFilename(file))))
 	f.Name = osutil.NativeFilename(f.Name)
 	return f, ok
 }
 
 func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), false)
 	if !ok {
 		return protocol.FileInfo{}, false
@@ -262,6 +320,9 @@ func (s *FileSet) GetGlobal(file string) (protocol.FileInfo, bool) {
 }
 
 func (s *FileSet) GetGlobalTruncated(file string) (FileInfoTruncated, bool) {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	fi, ok := s.db.getGlobal([]byte(s.folder), []byte(osutil.NormalizedFilename(file)), true)
 	if !ok {
 		return FileInfoTruncated{}, false
@@ -276,26 +337,45 @@ func (s *FileSet) Availability(file string) []protocol.DeviceID {
 }
 
 func (s *FileSet) Sequence(device protocol.DeviceID) int64 {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	return s.meta.Counts(device, 0).Sequence
 }
 
 func (s *FileSet) LocalSize() Counts {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	local := s.meta.Counts(protocol.LocalDeviceID, 0)
 	recvOnlyChanged := s.meta.Counts(protocol.LocalDeviceID, protocol.FlagLocalReceiveOnly)
 	return local.Add(recvOnlyChanged)
 }
 
 func (s *FileSet) ReceiveOnlyChangedSize() Counts {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	return s.meta.Counts(protocol.LocalDeviceID, protocol.FlagLocalReceiveOnly)
 }
 
 func (s *FileSet) GlobalSize() Counts {
+	s.localDeviceMutex.RLock()
+	defer s.localDeviceMutex.RUnlock()
+
 	global := s.meta.Counts(protocol.GlobalDeviceID, 0)
 	recvOnlyChanged := s.meta.Counts(protocol.GlobalDeviceID, protocol.FlagLocalReceiveOnly)
 	return global.Add(recvOnlyChanged)
 }
 
 func (s *FileSet) IndexID(device protocol.DeviceID) protocol.IndexID {
+	if device == protocol.LocalDeviceID {
+		s.localDeviceMutex.RLock()
+		defer s.localDeviceMutex.RUnlock()
+	}
+
 	id := s.db.getIndexID(device[:], []byte(s.folder))
 	if id == 0 && device == protocol.LocalDeviceID {
 		// No index ID set yet. We create one now.
