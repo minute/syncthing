@@ -1,4 +1,4 @@
 root: ./docs/
 redirects:
-  users/ignoring.html: usage/ignoring-files.md
+  users/ignoring: usage/ignoring-files.md
 
