@@ -1,11 +1,8 @@
-GET /rest/system/config/insync
-==============================
+# rest/system-config-insync-get.md
 
-Returns whether the config is in sync, i.e. whether the running
-configuration is the same as that on disk.
+Returns whether the config is in sync, i.e. whether the running configuration is the same as that on disk.
 
-``` {.sourceCode .json}
-{
-  "configInSync": true
-}
-```
+\`\`\` {.sourceCode .json} { "configInSync": true }
+
+\`\`\`
+

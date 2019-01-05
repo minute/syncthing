@@ -1,60 +1,54 @@
-Creating a Release
-==================
+# dev/release-creation.md
 
-Prerequisites
--------------
+## Prerequisites
 
--   About ten minutes to half an hour of free time.
--   The master branch in a clean and buildable state, full of commits
-    you are proud of and know the users will love. This is of course the
-    default state at any given time.
--   A normal computer (real or virtual) that has a command line and can
-    run bash scripts. Macs and Linux boxes are good choices here. If you
-    know what you\'re doing I\'m sure it\'s entirely possible to do it
-    on Windows as well - but then you\'re on your own. In a pinch you
-    can use `secure.syncthing.net` as it has all the required tools
-    installed, although you\'ll need to add your git config, keys etc.
--   The source repo, Git, Go, and GPG. It doesn\'t much matter which
-    version of Go, we are not going to be building the release artifacts
-    with it. If you can build the project you are good to go. If you
-    can\'t build it, please don\'t attempt to make a release of it.
--   Push access to the repo, being able to bypass the pull request
-    requirements. This means `admin` or `maintainers` group.
--   An account on `secure.syncthing.net` with sudo access.
--   A TeamCity account on `build.syncthing.net` with deploy access.
+* About ten minutes to half an hour of free time.
+* The master branch in a clean and buildable state, full of commits
 
-Release Procedure
------------------
+  you are proud of and know the users will love. This is of course the
 
-The procedure differs sligthly depending on whether we\'re doing a
-release candidate or a stable release. Candidate releases require work
-to prepare the changelog, which will just be reused for the stable
-release. The stable release on the other hand requires a slightly
-different release process and is announced more widely.
+  default state at any given time.
+
+* A normal computer \(real or virtual\) that has a command line and can
+
+  run bash scripts. Macs and Linux boxes are good choices here. If you
+
+  know what you\'re doing I\'m sure it\'s entirely possible to do it
+
+  on Windows as well - but then you\'re on your own. In a pinch you
+
+  can use `secure.syncthing.net` as it has all the required tools
+
+  installed, although you\'ll need to add your git config, keys etc.
+
+* The source repo, Git, Go, and GPG. It doesn\'t much matter which
+
+  version of Go, we are not going to be building the release artifacts
+
+  with it. If you can build the project you are good to go. If you
+
+  can\'t build it, please don\'t attempt to make a release of it.
+
+* Push access to the repo, being able to bypass the pull request
+
+  requirements. This means `admin` or `maintainers` group.
+
+* An account on `secure.syncthing.net` with sudo access.
+* A TeamCity account on `build.syncthing.net` with deploy access.
+
+## Release Procedure
+
+The procedure differs sligthly depending on whether we\'re doing a release candidate or a stable release. Candidate releases require work to prepare the changelog, which will just be reused for the stable release. The stable release on the other hand requires a slightly different release process and is announced more widely.
 
 ### Release Candidates - Write a Change Log
 
-Most of the change log is machine generated from the closed issues. We
-do however need to make sure that issues belong to the correct
-milestone, have the correct labels, and that the issue subject makes
-sense as a line in the change log. To our help we have the purpose
-written tool \[grt\](<https://github./calmh/github-release-tool>). The
-grt tool requires your GitHub token to manage milestones and issues; you
-set the environment variable `GITHUB_TOKEN` while you are working on the
-release (but hopefully not all the time - programs can and do steal
-environment data).
+Most of the change log is machine generated from the closed issues. We do however need to make sure that issues belong to the correct milestone, have the correct labels, and that the issue subject makes sense as a line in the change log. To our help we have the purpose written tool \[grt\]\([https://github./calmh/github-release-tool](https://github./calmh/github-release-tool)\). The grt tool requires your GitHub token to manage milestones and issues; you set the environment variable `GITHUB_TOKEN` while you are working on the release \(but hopefully not all the time - programs can and do steal environment data\).
 
-To ensure that all closed issues are tagged with the milestone for the
-release you are doing, use the following command. First, find the commit
-hash or tag of the last commit on the *previous* release - changes since
-this point is what we are going to consider part of this release. If
-there haven\'t been any special releases or branching you can simply use
-the previous release as the starting point.
+To ensure that all closed issues are tagged with the milestone for the release you are doing, use the following command. First, find the commit hash or tag of the last commit on the _previous_ release - changes since this point is what we are going to consider part of this release. If there haven\'t been any special releases or branching you can simply use the previous release as the starting point.
 
-``` {.sourceCode .bash}
-$ grt milestone v0.14.50 --from=v0.14.49
-```
+\`\`\` {.sourceCode .bash} $ grt milestone v0.14.50 --from=v0.14.49
 
+```text
 Visit the milestone in your browser and double check the issue subjects
 and labels. Remember that only closed issues (not pull requests) will
 appear in the change log. You can preview the change log using grt:
@@ -67,33 +61,21 @@ Bugfixes:
  - #5073: lib/logger: tests fail due to compilation error with go 1.11
 ```
 
-Now write a changelog.txt. Look at the previous ones for inspiration;
-they are in the tag message for each recent previous release. The first
-line is the version being described. Then start with a sentence
-describing the release type (scheduled feature and bugfix, hotfix, \...)
-and who should use it. Follow with the set of issues closed since last
-release - just pipe the output from `grt changelog` here.
+Now write a changelog.txt. Look at the previous ones for inspiration; they are in the tag message for each recent previous release. The first line is the version being described. Then start with a sentence describing the release type \(scheduled feature and bugfix, hotfix, ...\) and who should use it. Follow with the set of issues closed since last release - just pipe the output from `grt changelog` here.
 
 Add further notes or commentary to taste, if required.
 
 ### Stable Release - Write a Change Log
 
-Use the change log from the corresponding release candidate, just change
-the version in the first line and the first sentence that describes the
-release status.
+Use the change log from the corresponding release candidate, just change the version in the first line and the first sentence that describes the release status.
 
 ### Prepare the Release Branch
 
-Releases come from the `release` branch. If you are making a new
-candidate release you will want to fast forward `release` to point at
-current `master` `HEAD`. If you are making a stable release from the
-latest RC the `release` branch is already in the right place.
+Releases come from the `release` branch. If you are making a new candidate release you will want to fast forward `release` to point at current `master` `HEAD`. If you are making a stable release from the latest RC the `release` branch is already in the right place.
 
-``` {.sourceCode .bash}
-$ git checkout release
-$ git merge --ff-only master
-```
+\`\`\` {.sourceCode .bash} $ git checkout release $ git merge --ff-only master
 
+```text
 If there\'s been some funky business with the `release` branch and it
 can\'t be fast forwarded to `master`, 1) the previous release manager
 screwed up, 2) don\'t do a merge, just reset the branch to the right
@@ -111,36 +93,23 @@ $ git push origin release:release
 
 The changelog file is the one you prepared previously.
 
-You will need your PGP key at hand for this step. It should be your
-personal PGP key, whatever you would normally use. If you don\'t have
-one you\'ll need to create one for the purpose. Keep it around, keep it
-secure, upload the public part to a key server.
+You will need your PGP key at hand for this step. It should be your personal PGP key, whatever you would normally use. If you don\'t have one you\'ll need to create one for the purpose. Keep it around, keep it secure, upload the public part to a key server.
 
 If your remote spec is nondefault, tailor the push command to suit.
 
 ### Build the Packages
 
-If you are building a release candidate and fast forwarded the `release`
-branch the build server will already have started building it. If not,
-jump in on the build server and trigger the Release/Syncthing job, for
-the `release` branch, while checking the options to rebuild all
-dependencies in the chain. We need the rebuild for those binaries to
-pick up the new tag.
+If you are building a release candidate and fast forwarded the `release` branch the build server will already have started building it. If not, jump in on the build server and trigger the Release/Syncthing job, for the `release` branch, while checking the options to rebuild all dependencies in the chain. We need the rebuild for those binaries to pick up the new tag.
 
-Once the build succeds, log in on `secure.syncthing.net`. If something
-failed in the build it\'s hopefully \"just\" a flaky test - redo the
-build.
+Once the build succeds, log in on `secure.syncthing.net`. If something failed in the build it\'s hopefully \"just\" a flaky test - redo the build.
 
 ### Create the GitHub release
 
 From this point on we will work on `secure.s.n`, as the `release` user.
 
-``` {.sourceCode .bash}
-jb@laptop$ ssh secure.syncthing.net
-jb@secure$ sudo su - release
-release@secure$
-```
+\`\`\` {.sourceCode .bash} jb@laptop$ ssh secure.syncthing.net jb@secure$ sudo su - release release@secure$
 
+```text
 We will use grt to create the release with the appropriate change log,
 and possibly close the milestone. If we are doing a candidate release we
 need to tell grt about that:
@@ -149,13 +118,11 @@ need to tell grt about that:
 $ grt release v0.14.50 --to=v0.14.50-rc.1
 ```
 
-This will create a v0.14.50-rc.1 release, with the \"pre-release\" bit
-set, and leave the v0.14.50 milestone open. For a stable release:
+This will create a v0.14.50-rc.1 release, with the \"pre-release\" bit set, and leave the v0.14.50 milestone open. For a stable release:
 
-``` {.sourceCode .bash}
-$ grt release v0.14.50
-```
+\`\`\` {.sourceCode .bash} $ grt release v0.14.50
 
+```text
 The milestone will be closed.
 
 ### Sign and upload the archives
@@ -173,10 +140,9 @@ $ sign-upload-debian /home/incoming/build-1234-v0.14.50
 
 Publishes the Debian archives to apt.syncthing.net.
 
-``` {.sourceCode .bash}
-$ upload-snaps /home/incoming/build-1234-v0.14.50
-```
+\`\`\` {.sourceCode .bash} $ upload-snaps /home/incoming/build-1234-v0.14.50
 
+```text
 Publishes the Snap packages to Ubuntu.
 
 ``` {.sourceCode .bash}
@@ -187,19 +153,13 @@ Publishes the regular release archives to GitHub.
 
 ### Stable Releases - Create a post on the forum
 
-In the Announce/Releases category. Use the tag message as the template,
-make the header a link to the release, make the issue numbers to be
-links to the corresponding issues. You can use
-`grt changelog v0.14.50 --md` to get the change log with issue links in
-proper Markdown.
+In the Announce/Releases category. Use the tag message as the template, make the header a link to the release, make the issue numbers to be links to the corresponding issues. You can use `grt changelog v0.14.50 --md` to get the change log with issue links in proper Markdown.
 
 ### Stable Releases - Optionally, tweet it
 
-If you have the Twitter account and the release isn\'t a
-cake-in-your-face screwup fix that you\'d rather no one ever heard about
-and want to just silently roll out to everyone during the night.
+If you have the Twitter account and the release isn\'t a cake-in-your-face screwup fix that you\'d rather no one ever heard about and want to just silently roll out to everyone during the night.
 
 ### Merge Release Into Master
 
-If this was a non-first candidate release with cherry picked commits on
-it, merge `release` back into `master` and push `master`.
+If this was a non-first candidate release with cherry picked commits on it, merge `release` back into `master` and push `master`.
+

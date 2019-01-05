@@ -1,255 +1,199 @@
-Syncthing Discovery Server
-==========================
+# usage/stdiscosrv.md
 
-Synopsis
---------
+## Synopsis
 
-    stdiscosrv [-cert=<file>] [-db-dir=<string>] [-debug] [-http] [-key=<string>]
-               [-listen=<address>] [-metrics-listen=<address>]
-               [-replicate=<peers>] [-replication-listen=<address>]
+```text
+stdiscosrv [-cert=<file>] [-db-dir=<string>] [-debug] [-http] [-key=<string>]
+           [-listen=<address>] [-metrics-listen=<address>]
+           [-replicate=<peers>] [-replication-listen=<address>]
+```
 
-Description
------------
+## Description
 
-Syncthing relies on a discovery server to find peers on the internet.
-Anyone can run a discovery server and point Syncthing installations to
-it. The Syncthing project also maintains a global cluster for public
-use.
+Syncthing relies on a discovery server to find peers on the internet. Anyone can run a discovery server and point Syncthing installations to it. The Syncthing project also maintains a global cluster for public use.
 
-Options
--------
+## Options
 
-::: {.cmdoption}
--cert=\<file\>
+::: {.cmdoption} -cert=\
 
-Certificate file (default \"./cert.pem\").
-:::
+Certificate file \(default \"./cert.pem\"\). :::
 
-::: {.cmdoption}
--db-dir=\<string\>
+::: {.cmdoption} -db-dir=\
 
-Database directory, where data is stored (default \"./discovery.db\").
-:::
+Database directory, where data is stored \(default \"./discovery.db\"\). :::
 
-::: {.cmdoption}
--debug
+::: {.cmdoption} -debug
 
-Enable debug output.
-:::
+Enable debug output. :::
 
-::: {.cmdoption}
--http
+::: {.cmdoption} -http
 
-Listen on HTTP (behind an HTTPS proxy).
-:::
+Listen on HTTP \(behind an HTTPS proxy\). :::
 
-::: {.cmdoption}
--key=\<file\>
+::: {.cmdoption} -key=\
 
-Key file (default \"./key.pem\").
-:::
+Key file \(default \"./key.pem\"\). :::
 
-::: {.cmdoption}
--listen=\<address\>
+::: {.cmdoption} -listen=\
 
-Listen address (default \":8443\").
-:::
+Listen address \(default \":8443\"\). :::
 
-::: {.cmdoption}
--metrics-listen=\<address\>
+::: {.cmdoption} -metrics-listen=\
 
-Prometheus compatible metrics endpoint listen address (default
-disabled).
-:::
+Prometheus compatible metrics endpoint listen address \(default disabled\). :::
 
-::: {.cmdoption}
--replicate=\<peers\>
+::: {.cmdoption} -replicate=\
 
-Replication peers, <id@address>, comma separated
-:::
+Replication peers, [id@address](mailto:id@address), comma separated :::
 
-::: {.cmdoption}
--replication-listen=\<address\>
+::: {.cmdoption} -replication-listen=\
 
-Listen address for incoming replication connections (default
-\":19200\").
-:::
+Listen address for incoming replication connections \(default \":19200\"\). :::
 
-Pointing Syncthing at Your Discovery Server
--------------------------------------------
+## Pointing Syncthing at Your Discovery Server
 
-By default, Syncthing uses a number of global discovery servers,
-signified by the entry `default` in the list of discovery servers. To
-make Syncthing use your own instance of stdiscosrv, open up Syncthing\'s
-web GUI. Go to settings, Global Discovery Server and add stdiscosrv\'s
-host address to the comma-separated list, e.g.
-`https://disco.example.com:8443/`. Note that stdiscosrv uses port 8443
-by default. For stdiscosrv to be available over the internet with a
-dynamic IP address, you will need a dynamic DNS service.
+By default, Syncthing uses a number of global discovery servers, signified by the entry `default` in the list of discovery servers. To make Syncthing use your own instance of stdiscosrv, open up Syncthing\'s web GUI. Go to settings, Global Discovery Server and add stdiscosrv\'s host address to the comma-separated list, e.g. `https://disco.example.com:8443/`. Note that stdiscosrv uses port 8443 by default. For stdiscosrv to be available over the internet with a dynamic IP address, you will need a dynamic DNS service.
 
-::: {.deprecated}
-v0.14.44 Prior versions need `/v2/` appended to the discovery server
-address, e.g. `https://disco.example.com:8443/v2/`.
-:::
+::: {.deprecated} v0.14.44 Prior versions need `/v2/` appended to the discovery server address, e.g. `https://disco.example.com:8443/v2/`. :::
 
-If you wish to use *only* your own discovery server, remove the
-`default` entry from the list.
+If you wish to use _only_ your own discovery server, remove the `default` entry from the list.
 
-Setting Up
-----------
+## Setting Up
 
 ### Description
 
-This guide assumes that you have already set up Syncthing. If you
-haven\'t yet, head over to `getting-started`{.interpreted-text
-role="ref"} first.
+This guide assumes that you have already set up Syncthing. If you haven\'t yet, head over to `getting-started`{.interpreted-text role="ref"} first.
 
 ### Installing
 
-Go to [releases](https://github.com/syncthing/discosrv/releases) and
-download the file appropriate for your operating system. Unpacking it
-will yield a binary called `stdiscosrv` (or `stdiscosrv.exe` on
-Windows). Start this in whatever way you are most comfortable with;
-double clicking should work in any graphical environment. At first
-start, stdiscosrv will generate certificate files and database in the
-current directory unless given flags to the contrary.
+Go to [releases](https://github.com/syncthing/discosrv/releases) and download the file appropriate for your operating system. Unpacking it will yield a binary called `stdiscosrv` \(or `stdiscosrv.exe` on Windows\). Start this in whatever way you are most comfortable with; double clicking should work in any graphical environment. At first start, stdiscosrv will generate certificate files and database in the current directory unless given flags to the contrary.
 
 ### Configuring
 
-::: {.note}
-::: {.admonition-title}
-Note
-:::
+::: {.note} ::: {.admonition-title} Note :::
 
-If you are running an instance of Syncthing on the discovery server, you
-must either add that instance to other devices using a static address or
-bind the discovery server and Syncthing instances to different IP
-addresses.
-:::
+If you are running an instance of Syncthing on the discovery server, you must either add that instance to other devices using a static address or bind the discovery server and Syncthing instances to different IP addresses. :::
 
 #### Certificates
 
-The discovery server provides service over HTTPS. To ensure secure
-connections from clients there are three options:
+The discovery server provides service over HTTPS. To ensure secure connections from clients there are three options:
 
--   Use a CA-signed certificate pair for the domain name you will use
-    for the discovery server. This is like any other HTTPS website;
-    clients will authenticate the server based on its certificate and
-    domain name.
--   Use any certificate pair and let clients authenticate the server
-    based on its \"device ID\" (similar to Syncthing-to-Syncthing
-    authentication). This option can be used with the certificate
-    automatically generated by the discovery server.
--   Pass the `-http` flag if the discovery server is behind an
-    SSL-secured reverse proxy. See below for configuration.
+* Use a CA-signed certificate pair for the domain name you will use
 
-For the first two options, the discovery server must be given the paths
-to the certificate and key at startup. This isn\'t necessary with the
-`http` flag:
+  for the discovery server. This is like any other HTTPS website;
 
-    $ stdiscosrv -cert=/path/to/cert.pem -key=/path/to/key.pem
-    Server device ID is 7DDRT7J-UICR4PM-PBIZYL3-MZOJ7X7-EX56JP6-IK6HHMW-S7EK32W-G3EUPQA
+  clients will authenticate the server based on its certificate and
 
-The discovery server prints its device ID at startup. In case you are
-using a non CA signed certificate, this device ID (fingerprint) must be
-given to the clients in the discovery server URL:
+  domain name.
 
-    https://disco.example.com:8443/?id=7DDRT7J-UICR4PM-PBIZYL3-MZOJ7X7-EX56JP6-IK6HHMW-S7EK32W-G3EUPQA
+* Use any certificate pair and let clients authenticate the server
+
+  based on its \"device ID\" \(similar to Syncthing-to-Syncthing
+
+  authentication\). This option can be used with the certificate
+
+  automatically generated by the discovery server.
+
+* Pass the `-http` flag if the discovery server is behind an
+
+  SSL-secured reverse proxy. See below for configuration.
+
+For the first two options, the discovery server must be given the paths to the certificate and key at startup. This isn\'t necessary with the `http` flag:
+
+```text
+$ stdiscosrv -cert=/path/to/cert.pem -key=/path/to/key.pem
+Server device ID is 7DDRT7J-UICR4PM-PBIZYL3-MZOJ7X7-EX56JP6-IK6HHMW-S7EK32W-G3EUPQA
+```
+
+The discovery server prints its device ID at startup. In case you are using a non CA signed certificate, this device ID \(fingerprint\) must be given to the clients in the discovery server URL:
+
+```text
+https://disco.example.com:8443/?id=7DDRT7J-UICR4PM-PBIZYL3-MZOJ7X7-EX56JP6-IK6HHMW-S7EK32W-G3EUPQA
+```
 
 Otherwise, the URL will be:
 
-    https://disco.example.com:8443/
+```text
+https://disco.example.com:8443/
+```
 
 #### Replication
 
-The discovery server can be deployed in a redundant, load sharing
-fashion. In this mode announcements are replicated from the server that
-receives them to other peer servers and queries can be answered equally
-by all servers.
+The discovery server can be deployed in a redundant, load sharing fashion. In this mode announcements are replicated from the server that receives them to other peer servers and queries can be answered equally by all servers.
 
-Replication connections are encrypted and authenticated using TLS. The
-certificate is selected by the `-cert` and `-key` options and is thus
-shared with the main discovery API. If the `-http` mode is used the
-certificate is not used for client requests but only for replication
-connections.
+Replication connections are encrypted and authenticated using TLS. The certificate is selected by the `-cert` and `-key` options and is thus shared with the main discovery API. If the `-http` mode is used the certificate is not used for client requests but only for replication connections.
 
-Authentication of replication connections is done using [Syncthing-style
-device IDs](https://docs.syncthing.net/dev/device-ids.html#id1) only -
-CA verification is not available. The device IDs in question are those
-printed by the discovery server on startup.
+Authentication of replication connections is done using [Syncthing-style device IDs](https://docs.syncthing.net/dev/device-ids.html#id1) only - CA verification is not available. The device IDs in question are those printed by the discovery server on startup.
 
-Replication connections are unidirectional - announcements are
-replication from the **sender** to a **listener**. In order to have a
-bidirectional replication relationship between two servers both need to
-be configured as sender and listener.
+Replication connections are unidirectional - announcements are replication from the **sender** to a **listener**. In order to have a bidirectional replication relationship between two servers both need to be configured as sender and listener.
 
 As an example, lets assume two discovery servers:
 
--   Server one is on 192.0.2.20 and has certificate ID I6K\...H76
--   Server two is on 192.0.2.55 and has certificate ID MRI\...7OK
+* Server one is on 192.0.2.20 and has certificate ID I6K...H76
+* Server two is on 192.0.2.55 and has certificate ID MRI...7OK
 
-In order for both to replicate to the other and thus form a redundant
-pair, use the following commands.
+In order for both to replicate to the other and thus form a redundant pair, use the following commands.
 
 On server one:
 
-    $ stdiscosrv -replicate=MRI...7OK@192.0.2.55:19200 <other options>
+```text
+$ stdiscosrv -replicate=MRI...7OK@192.0.2.55:19200 <other options>
+```
 
 On server two:
 
-    $ stdiscosrv -replicate=I6K...H76@192.0.2.20:19200 <other options>
+```text
+$ stdiscosrv -replicate=I6K...H76@192.0.2.20:19200 <other options>
+```
 
-The `-replicate` directive sets which remote device IDs are expected and
-allowed for both outgoing (sending) and incoming (listening)
-connections, and which addresses to use when connecting out to those
-peers. Both IP and port must be specified in peer addresses.
+The `-replicate` directive sets which remote device IDs are expected and allowed for both outgoing \(sending\) and incoming \(listening\) connections, and which addresses to use when connecting out to those peers. Both IP and port must be specified in peer addresses.
 
-It is possible to only allow incoming connections from a peer without
-establishing an outgoing replication connection. To do so, give only the
-device ID without \"\@ip:port\" address:
+It is possible to only allow incoming connections from a peer without establishing an outgoing replication connection. To do so, give only the device ID without \"\@ip:port\" address:
 
-    $ stdiscosrv -replicate=I6K...H76 <other options>
+```text
+$ stdiscosrv -replicate=I6K...H76 <other options>
+```
 
-Discosrv will listen on the replication port only when `-replicate` is
-given. The default replication listen address is \":19200\".
+Discosrv will listen on the replication port only when `-replicate` is given. The default replication listen address is \":19200\".
 
-To achieve load balancing over two mutually replicating discovery server
-instances, add multiple A / AAAA DNS records for a given name and point
-Syncthing towards this name. The same certificate must be used on both
-discovery servers.
+To achieve load balancing over two mutually replicating discovery server instances, add multiple A / AAAA DNS records for a given name and point Syncthing towards this name. The same certificate must be used on both discovery servers.
 
 ### Reverse Proxy Setup
 
-The discovery server can be run behind an SSL-secured reverse proxy.
-This allows:
+The discovery server can be run behind an SSL-secured reverse proxy. This allows:
 
--   Use of a subdomain name without requiring a port number added to the
-    URL
--   Sharing an SSL certificate with multiple services on the same server
+* Use of a subdomain name without requiring a port number added to the
+
+  URL
+
+* Sharing an SSL certificate with multiple services on the same server
 
 #### Requirements
 
--   Run the discovery server using the -http flag
-    `stdiscosrv -http`{.sourceCode}.
--   SSL certificate/key configured for the reverse proxy
--   The \"X-Forwarded-For\" http header must be passed through with the
-    client\'s real IP address
--   The \"X-SSL-Cert\" must be passed through with the PEM-encoded
-    client SSL certificate
--   The proxy must request the client SSL certificate but not require it
-    to be signed by a trusted CA.
+* Run the discovery server using the -http flag
+
+  `stdiscosrv -http`{.sourceCode}.
+
+* SSL certificate/key configured for the reverse proxy
+* The \"X-Forwarded-For\" http header must be passed through with the
+
+  client\'s real IP address
+
+* The \"X-SSL-Cert\" must be passed through with the PEM-encoded
+
+  client SSL certificate
+
+* The proxy must request the client SSL certificate but not require it
+
+  to be signed by a trusted CA.
 
 #### Nginx
 
-These three lines in the configuration take care of the last three
-requirements listed above:
+These three lines in the configuration take care of the last three requirements listed above:
 
-``` {.sourceCode .nginx}
-proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-proxy_set_header X-SSL-Cert $ssl_client_cert;
-ssl_verify_client optional_no_ca;
-```
+\`\`\` {.sourceCode .nginx} proxy\_set\_header X-Forwarded-For $proxy\_add\_x\_forwarded\_for; proxy\_set\_header X-SSL-Cert $ssl\_client\_cert; ssl\_verify\_client optional\_no\_ca;
 
+```text
 The following is a complete example Nginx configuration file. With this
 setup, clients can use <https://discovery.example.com> as the discovery
 server URL in the Syncthing settings.
@@ -295,13 +239,9 @@ server {
 }
 ```
 
-An example of automating the SSL certificates and reverse-proxying the
-Discovery Server and Syncthing using Nginx, [Let\'s
-Encrypt](https://letsencrypt.org/) and Docker can be found
-[here](https://forum.syncthing.net/t/docker-syncthing-and-syncthing-discovery-behind-nginx-reverse-proxy-with-lets-encrypt/6880).
+An example of automating the SSL certificates and reverse-proxying the Discovery Server and Syncthing using Nginx, [Let\'s Encrypt](https://letsencrypt.org/) and Docker can be found [here](https://forum.syncthing.net/t/docker-syncthing-and-syncthing-discovery-behind-nginx-reverse-proxy-with-lets-encrypt/6880).
 
-See Also
---------
+## See Also
 
-`syncthing-networking(7)`{.interpreted-text role="manpage"},
-`syncthing-faq(7)`{.interpreted-text role="manpage"}
+`syncthing-networking(7)`{.interpreted-text role="manpage"}, `syncthing-faq(7)`{.interpreted-text role="manpage"}
+

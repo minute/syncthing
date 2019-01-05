@@ -1,243 +1,155 @@
-Syncthing
-=========
+# usage/syncthing.md
 
-Synopsis
---------
+## Synopsis
 
-    syncthing [-audit] [-auditfile=<file|-|-->] [-browser-only] [device-id]
-              [-generate=<dir>] [-gui-address=<address>] [-gui-apikey=<key>]
-              [-home=<dir>] [-logfile=<filename>] [-logflags=<flags>]
-              [-no-browser] [-no-console] [-no-restart] [-paths] [-paused]
-              [-reset-database] [-reset-deltas] [-unpaused] [-upgrade]
-              [-upgrade-check] [-upgrade-to=<url>] [-verbose] [-version]
+```text
+syncthing [-audit] [-auditfile=<file|-|-->] [-browser-only] [device-id]
+          [-generate=<dir>] [-gui-address=<address>] [-gui-apikey=<key>]
+          [-home=<dir>] [-logfile=<filename>] [-logflags=<flags>]
+          [-no-browser] [-no-console] [-no-restart] [-paths] [-paused]
+          [-reset-database] [-reset-deltas] [-unpaused] [-upgrade]
+          [-upgrade-check] [-upgrade-to=<url>] [-verbose] [-version]
+```
 
-Description
------------
+## Description
 
-Syncthing lets you synchronize your files bidirectionally across
-multiple devices. This means the creation, modification or deletion of
-files on one machine will automatically be replicated to your other
-devices. We believe your data is your data alone and you deserve to
-choose where it is stored. Therefore Syncthing does not upload your data
-to the cloud but exchanges your data across your machines as soon as
-they are online at the same time.
+Syncthing lets you synchronize your files bidirectionally across multiple devices. This means the creation, modification or deletion of files on one machine will automatically be replicated to your other devices. We believe your data is your data alone and you deserve to choose where it is stored. Therefore Syncthing does not upload your data to the cloud but exchanges your data across your machines as soon as they are online at the same time.
 
-Options
--------
+## Options
 
-::: {.cmdoption}
--audit
+::: {.cmdoption} -audit
 
-Write events to timestamped file `audit-YYYYMMDD-HHMMSS.log`.
-:::
+Write events to timestamped file `audit-YYYYMMDD-HHMMSS.log`. :::
 
-::: {.cmdoption}
--auditfile=\<file\--\>
+::: {.cmdoption} -auditfile=\
 
-Use specified file or stream (`"-"` for stdout, `"--"` for stderr) for
-audit events, rather than the timestamped default file name.
-:::
+Use specified file or stream \(`"-"` for stdout, `"--"` for stderr\) for audit events, rather than the timestamped default file name. :::
 
-::: {.cmdoption}
--browser-only
+::: {.cmdoption} -browser-only
 
-Open the web UI in a browser for an already running Syncthing instance.
-:::
+Open the web UI in a browser for an already running Syncthing instance. :::
 
-::: {.cmdoption}
--device-id
+::: {.cmdoption} -device-id
 
-Print device ID to command line.
-:::
+Print device ID to command line. :::
 
-::: {.cmdoption}
--generate=\<dir\>
+::: {.cmdoption} -generate=\
 
-Generate key and config in specified dir, then exit.
-:::
+Generate key and config in specified dir, then exit. :::
 
-::: {.cmdoption}
--gui-address=\<address\>
+::: {.cmdoption} -gui-address=\
 
-Override GUI listen address. Set this to an address (`0.0.0.0:8384`) or
-file path (`/var/run/st.sock`, for UNIX sockets).
-:::
+Override GUI listen address. Set this to an address \(`0.0.0.0:8384`\) or file path \(`/var/run/st.sock`, for UNIX sockets\). :::
 
-::: {.cmdoption}
--home=\<dir\>
+::: {.cmdoption} -home=\
 
-Set configuration directory. The default configuration directory is
-`$HOME/.config/syncthing` (Unix-like),
-`$HOME/Library/Application Support/Syncthing` (Mac) and
-`%LOCALAPPDATA%\Syncthing` (Windows).
-:::
+Set configuration directory. The default configuration directory is `$HOME/.config/syncthing` \(Unix-like\), `$HOME/Library/Application Support/Syncthing` \(Mac\) and `%LOCALAPPDATA%\Syncthing` \(Windows\). :::
 
-::: {.cmdoption}
--logfile=\<filename\>
+::: {.cmdoption} -logfile=\
 
-Set destination filename for logging (use `"-"` for stdout, which is the
-default option).
-:::
+Set destination filename for logging \(use `"-"` for stdout, which is the default option\). :::
 
-::: {.cmdoption}
--logflags=\<flags\>
+::: {.cmdoption} -logflags=\
 
-Select information in log line prefix. The `-logflags` value is a sum of
-the following:
+Select information in log line prefix. The `-logflags` value is a sum of the following:
 
--   1: Date
--   2: Time
--   4: Microsecond time
--   8: Long filename
--   16: Short filename
+* 1: Date
+* 2: Time
+* 4: Microsecond time
+* 8: Long filename
+* 16: Short filename
 
-To prefix each log line with date and time, set `-logflags=3` (1 + 2
-from above). The value 0 is used to disable all of the above. The
-default is to show time only (2).
-:::
+To prefix each log line with date and time, set `-logflags=3` \(1 + 2 from above\). The value 0 is used to disable all of the above. The default is to show time only \(2\). :::
 
-::: {.cmdoption}
--no-browser
+::: {.cmdoption} -no-browser
 
-Do not start a browser.
-:::
+Do not start a browser. :::
 
-::: {.cmdoption}
--no-console
+::: {.cmdoption} -no-console
 
-Hide the console window. (On Windows only)
-:::
+Hide the console window. \(On Windows only\) :::
 
-::: {.cmdoption}
--no-restart
+::: {.cmdoption} -no-restart
 
-Disable the Syncthing monitor process which handles restarts for some
-configuration changes, upgrades, crashes and also log file writing
-(stdout is still written).
-:::
+Disable the Syncthing monitor process which handles restarts for some configuration changes, upgrades, crashes and also log file writing \(stdout is still written\). :::
 
-::: {.cmdoption}
--paths
+::: {.cmdoption} -paths
 
-Print the paths used for configuration, keys, database, GUI overrides,
-default sync folder and the log file.
-:::
+Print the paths used for configuration, keys, database, GUI overrides, default sync folder and the log file. :::
 
-::: {.cmdoption}
--paused
+::: {.cmdoption} -paused
 
-Start with all devices and folders paused.
-:::
+Start with all devices and folders paused. :::
 
-::: {.cmdoption}
--reset-database
+::: {.cmdoption} -reset-database
 
-Reset the database, forcing a full rescan and resync. Create
-[.stfolder]{.title-ref} folders in each sync folder if they do not
-already exist. **Caution**: Ensure that all sync folders which are
-mountpoints are already mounted. Inconsistent versions may result if the
-mountpoint is later mounted and contains older versions.
-:::
+Reset the database, forcing a full rescan and resync. Create \[.stfolder\]{.title-ref} folders in each sync folder if they do not already exist. **Caution**: Ensure that all sync folders which are mountpoints are already mounted. Inconsistent versions may result if the mountpoint is later mounted and contains older versions. :::
 
-::: {.cmdoption}
--reset-deltas
+::: {.cmdoption} -reset-deltas
 
-Reset delta index IDs, forcing a full index exchange.
-:::
+Reset delta index IDs, forcing a full index exchange. :::
 
-::: {.cmdoption}
--unpaused
+::: {.cmdoption} -unpaused
 
-Start with all devices and folders unpaused.
-:::
+Start with all devices and folders unpaused. :::
 
-::: {.cmdoption}
--upgrade
+::: {.cmdoption} -upgrade
 
-Perform upgrade.
-:::
+Perform upgrade. :::
 
-::: {.cmdoption}
--upgrade-check
+::: {.cmdoption} -upgrade-check
 
-Check for available upgrade.
-:::
+Check for available upgrade. :::
 
-::: {.cmdoption}
--upgrade-to=\<url\>
+::: {.cmdoption} -upgrade-to=\
 
-Force upgrade directly from specified URL.
-:::
+Force upgrade directly from specified URL. :::
 
-::: {.cmdoption}
--verbose
+::: {.cmdoption} -verbose
 
-Print verbose log output.
-:::
+Print verbose log output. :::
 
-::: {.cmdoption}
--version
+::: {.cmdoption} -version
 
-Show version.
-:::
+Show version. :::
 
-Exit Codes
-----------
+## Exit Codes
 
 0
 
-:   Success / Shutdown
+: Success / Shutdown
 
 1
 
-:   Error
+: Error
 
 2
 
-:   Upgrade not available
+: Upgrade not available
 
 3
 
-:   Restarting
+: Restarting
 
 4
 
-:   Upgrading
+: Upgrading
 
-Some of these exit codes are only returned when running without a
-monitor process (with environment variable `STNORESTART` set). Exit
-codes over 125 are usually returned by the shell/binary loader/default
-signal handler. Exit codes over 128+N on Unix usually represent the
-signal which caused the process to exit. For example,
-`128 + 9 (SIGKILL) = 137`.
+Some of these exit codes are only returned when running without a monitor process \(with environment variable `STNORESTART` set\). Exit codes over 125 are usually returned by the shell/binary loader/default signal handler. Exit codes over 128+N on Unix usually represent the signal which caused the process to exit. For example, `128 + 9 (SIGKILL) = 137`.
 
-Proxies
--------
+## Proxies
 
-Syncthing can use a SOCKS, HTTP, or HTTPS proxy to talk to the outside
-world. The proxy is used for outgoing connections only - it is not
-possible to accept incoming connections through the proxy. The proxy is
-configured through the environment variable `all_proxy`. Somewhat
-unusually, this variable must be named in lower case - it is not
-\"`ALL_PROXY`{.interpreted-text role="strike"}\". For example:
+Syncthing can use a SOCKS, HTTP, or HTTPS proxy to talk to the outside world. The proxy is used for outgoing connections only - it is not possible to accept incoming connections through the proxy. The proxy is configured through the environment variable `all_proxy`. Somewhat unusually, this variable must be named in lower case - it is not \"`ALL_PROXY`{.interpreted-text role="strike"}\". For example:
 
-    $ export all_proxy=socks://192.0.2.42:8081
+```text
+$ export all_proxy=socks://192.0.2.42:8081
+```
 
-Development Settings
---------------------
+## Development Settings
 
-The following environment variables modify Syncthing\'s behavior in ways
-that are mostly useful for developers. Use with care. If you start
-Syncthing from within service managers like systemd or supervisor, path
-expansion may not be supported.
+The following environment variables modify Syncthing\'s behavior in ways that are mostly useful for developers. Use with care. If you start Syncthing from within service managers like systemd or supervisor, path expansion may not be supported.
 
-See Also
---------
+## See Also
 
-`syncthing-config(5)`{.interpreted-text role="manpage"},
-`syncthing-stignore(5)`{.interpreted-text role="manpage"},
-`syncthing-device-ids(7)`{.interpreted-text role="manpage"},
-`syncthing-security(7)`{.interpreted-text role="manpage"},
-`syncthing-networking(7)`{.interpreted-text role="manpage"},
-`syncthing-versioning(7)`{.interpreted-text role="manpage"},
-`syncthing-faq(7)`{.interpreted-text role="manpage"}
+`syncthing-config(5)`{.interpreted-text role="manpage"}, `syncthing-stignore(5)`{.interpreted-text role="manpage"}, `syncthing-device-ids(7)`{.interpreted-text role="manpage"}, `syncthing-security(7)`{.interpreted-text role="manpage"}, `syncthing-networking(7)`{.interpreted-text role="manpage"}, `syncthing-versioning(7)`{.interpreted-text role="manpage"}, `syncthing-faq(7)`{.interpreted-text role="manpage"}
+

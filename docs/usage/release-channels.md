@@ -1,4 +1,4 @@
-# Release Channels
+# usage/release-channels.md
 
 ## General
 

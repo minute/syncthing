@@ -4,10 +4,10 @@
 
 ## Advanced
 
-* [advanced/device-allowednetworks.md](advanced/device-allowednetworks.md)
-* [advanced/folder-autonormalize.md](advanced/folder-autonormalize.md)
-* [advanced/folder-ignoredelete.md](advanced/folder-ignoredelete.md)
-* [advanced/folder-uselargeblocks.md](advanced/folder-uselargeblocks.md)
+* [Allowed Networks](advanced/device-allowednetworks.md)
+* [Auto Normalize](advanced/folder-autonormalize.md)
+* [Ignore Delete](advanced/folder-ignoredelete.md)
+* [Large Blocks](advanced/folder-uselargeblocks.md)
 
 ## Dev
 
@@ -139,3 +139,4 @@
 * [usage/syncing.md](usage/syncing.md)
 * [usage/syncthing.md](usage/syncthing.md)
 * [usage/versioning.md](usage/versioning.md)
+

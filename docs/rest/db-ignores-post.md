@@ -1,7 +1,4 @@
-POST /rest/db/ignores
-=====================
+# rest/db-ignores-post.md
 
-Expects a format similar to the output of `GET` call, but only
-containing the `ignore` field (`expanded` field should be omitted). It
-takes one parameter, `folder`, and either updates the content of the
-`.stignore` echoing it back as a response, or returns an error.
+Expects a format similar to the output of `GET` call, but only containing the `ignore` field \(`expanded` field should be omitted\). It takes one parameter, `folder`, and either updates the content of the `.stignore` echoing it back as a response, or returns an error.
+

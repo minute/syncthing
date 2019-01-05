@@ -1,10 +1,8 @@
-GET /rest/system/ping
-=====================
+# rest/system-ping-get.md
 
 Returns a `{"ping": "pong"}` object.
 
-``` {.sourceCode .json}
-{
-  "ping": "pong"
-}
-```
+\`\`\` {.sourceCode .json} { "ping": "pong" }
+
+\`\`\`
+

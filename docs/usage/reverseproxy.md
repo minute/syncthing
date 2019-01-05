@@ -1,34 +1,27 @@
-Reverse Proxy Setup
-===================
+# usage/reverseproxy.md
 
-A reverse proxy allows you to \"pass\" requests through your web server
-to another site or program. The reverse proxy will make it look like
-Syncthing\'s GUI is a page within your existing site.
+A reverse proxy allows you to \"pass\" requests through your web server to another site or program. The reverse proxy will make it look like Syncthing\'s GUI is a page within your existing site.
 
 This is especially useful if:
 
--   You need to access the GUI on port 80 or 443 but you already host a
-    website on the same device.
--   You want to share SSL certificates with an existing site.
--   You want to share authentication with an existing setup.
+* You need to access the GUI on port 80 or 443 but you already host a
 
-Server Configuration
---------------------
+  website on the same device.
 
-If you have access to your web server\'s configuration use the following
-examples to pass the location `/syncthing` on your web server to
-Syncthing\'s GUI hosted on `localhost:8384`.
+* You want to share SSL certificates with an existing site.
+* You want to share authentication with an existing setup.
+
+## Server Configuration
+
+If you have access to your web server\'s configuration use the following examples to pass the location `/syncthing` on your web server to Syncthing\'s GUI hosted on `localhost:8384`.
 
 ### Apache
 
-``` {.sourceCode .apache}
-ProxyPass /syncthing/ http://localhost:8384/
-<Location /syncthing/>
-    ProxyPassReverse http://localhost:8384/
-    Require all granted
-</Location>
-```
+\`\`\` {.sourceCode .apache} ProxyPass /syncthing/ [http://localhost:8384/](http://localhost:8384/)
 
+ ProxyPassReverse [http://localhost:8384/](http://localhost:8384/) Require all granted
+
+```text
 ### Nginx
 
 ``` {.sourceCode .nginx}
@@ -47,18 +40,11 @@ location /syncthing/ {
 
 ### Caddy
 
-``` {.sourceCode .none}
-proxy /syncthing localhost:8384 {
-    transparent
-}
+\`\`\` {.sourceCode .none} proxy /syncthing localhost:8384 { transparent }
 
-timeouts {
-    read none
-    write none
-    header none
-}
-```
+timeouts { read none write none header none }
 
+```text
 Folder Configuration
 --------------------
 
@@ -79,5 +65,5 @@ RewriteRule .* https://%{SERVER_NAME}%{REQUEST_URI} [R=301,L]
 RewriteRule ^(.*) http://localhost:8384/$1 [P]
 ```
 
-This method also redirects to HTTPS to prevent opening the GUI
-unencrypted.
+This method also redirects to HTTPS to prevent opening the GUI unencrypted.
+

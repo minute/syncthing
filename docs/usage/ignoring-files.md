@@ -1,4 +1,4 @@
-# Ignoring Files
+# usage/ignoring-files.md
 
 ## Synopsis
 

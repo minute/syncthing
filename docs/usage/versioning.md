@@ -1,125 +1,86 @@
-File Versioning {#versioning}
-===============
+# usage/versioning.md
 
-Syncthing supports archiving the old version of a file when it is
-deleted or replaced with a newer version from the cluster. This is
-called \"file versioning\" and uses one of the available *versioning
-strategies* described below. File versioning is configured per folder,
-on a per-device basis, and defaults to \"no file versioning\", i.e. no
-old copies of files are kept.
+## File Versioning <a id="versioning"></a>
 
-Trash Can File Versioning
--------------------------
+Syncthing supports archiving the old version of a file when it is deleted or replaced with a newer version from the cluster. This is called \"file versioning\" and uses one of the available _versioning strategies_ described below. File versioning is configured per folder, on a per-device basis, and defaults to \"no file versioning\", i.e. no old copies of files are kept.
 
-This versioning strategy emulates the common \"trash can\" approach.
-When a file is deleted or replaced due to a change on a remote device,
-it is a moved to the trash can in the `.stversions` folder. If a file
-with the same name was already in the trash can it is replaced.
+### Trash Can File Versioning
 
-A configuration option is available to clean the trash can from files
-older than a specified number of days. If this is set to a positive
-number of days, files will be removed when they have been in the trash
-can that long. Setting this to zero prevents any files from being
-removed from the trash can automatically.
+This versioning strategy emulates the common \"trash can\" approach. When a file is deleted or replaced due to a change on a remote device, it is a moved to the trash can in the `.stversions` folder. If a file with the same name was already in the trash can it is replaced.
 
-Simple File Versioning
-----------------------
+A configuration option is available to clean the trash can from files older than a specified number of days. If this is set to a positive number of days, files will be removed when they have been in the trash can that long. Setting this to zero prevents any files from being removed from the trash can automatically.
 
-With \"Simple File Versioning\" files are moved to the `.stversions`
-folder (inside your shared folder) when replaced or deleted on a remote
-device. This option also takes a value in an input titled \"Keep
-Versions\" which tells Syncthing how many old versions of the file it
-should keep. For example, if you set this value to 5, if a file is
-replaced 5 times on a remote device, you will see 5 time-stamped
-versions on that file in the \".stversions\" folder on the other devices
-sharing the same folder.
+### Simple File Versioning
 
-Staggered File Versioning
--------------------------
+With \"Simple File Versioning\" files are moved to the `.stversions` folder \(inside your shared folder\) when replaced or deleted on a remote device. This option also takes a value in an input titled \"Keep Versions\" which tells Syncthing how many old versions of the file it should keep. For example, if you set this value to 5, if a file is replaced 5 times on a remote device, you will see 5 time-stamped versions on that file in the \".stversions\" folder on the other devices sharing the same folder.
 
-With \"Staggered File Versioning\" files are also moved to a different
-folder when replaced or deleted on a remote device (just like \"Simple
-File Versioning\"), however, versions are automatically deleted if they
-are older than the maximum age or exceed the number of files allowed in
-an interval.
+### Staggered File Versioning
 
-With this versioning method it\'s possible to specify where the versions
-are stored, with the default being the `.stversions` folder inside the
-normal folder path. If you set a custom version path, please ensure that
-it\'s on the same partition or filesystem as the regular folder path, as
-moving files there may otherwise fail. You can use an absolute path
-(this is recommended) or a relative path. Relative paths are interpreted
-relative to Syncthing\'s current or startup directory.
+With \"Staggered File Versioning\" files are also moved to a different folder when replaced or deleted on a remote device \(just like \"Simple File Versioning\"\), however, versions are automatically deleted if they are older than the maximum age or exceed the number of files allowed in an interval.
 
-The following intervals are used and they each have a maximum number of
-files that will be kept for each.
+With this versioning method it\'s possible to specify where the versions are stored, with the default being the `.stversions` folder inside the normal folder path. If you set a custom version path, please ensure that it\'s on the same partition or filesystem as the regular folder path, as moving files there may otherwise fail. You can use an absolute path \(this is recommended\) or a relative path. Relative paths are interpreted relative to Syncthing\'s current or startup directory.
+
+The following intervals are used and they each have a maximum number of files that will be kept for each.
 
 1 Hour
 
-:   For the first hour, the most recent version is kept every 30
-    seconds.
+: For the first hour, the most recent version is kept every 30 seconds.
 
 1 Day
 
-:   For the first day, the most recent version is kept every hour.
+: For the first day, the most recent version is kept every hour.
 
 30 Days
 
-:   For the first 30 days, the most recent version is kept every day.
+: For the first 30 days, the most recent version is kept every day.
 
 Until Maximum Age
 
-:   Until maximum age, the most recent version is kept every week.
+: Until maximum age, the most recent version is kept every week.
 
 Maximum Age
 
-:   The maximum time to keep a version in days. For example, to keep
-    replaced or deleted files in the \".stversions\" folder for an
-    entire year, use 365. If only for 10 days, use 10. **Note: Set to 0
-    to keep versions forever.**
+: The maximum time to keep a version in days. For example, to keep replaced or deleted files in the \".stversions\" folder for an entire year, use 365. If only for 10 days, use 10. **Note: Set to 0 to keep versions forever.**
 
-External File Versioning
-------------------------
+### External File Versioning
 
-This versioning method delegates the decision on what to do to an
-external command (program or script). Just prior to a file being
-replaced, the command will be run. The command should be specified as an
-absolute path, and can use the following templated arguments:
+This versioning method delegates the decision on what to do to an external command \(program or script\). Just prior to a file being replaced, the command will be run. The command should be specified as an absolute path, and can use the following templated arguments:
 
 %FOLDER\_PATH%
 
-:   Path to the folder
+: Path to the folder
 
 %FILE\_PATH%
 
-:   Path to the file within the folder
+: Path to the file within the folder
 
-### Example for Unixes
+#### Example for Unixes
 
-Lets say I want to keep the latest version of each file as they are
-replaced or removed; essentially I want a \"trash can\"-like behavior.
-For this, I create the following script and store it as
-`/Users/jb/bin/onlylatest.sh` (i.e. the `bin` directory in my home
-directory):
+Lets say I want to keep the latest version of each file as they are replaced or removed; essentially I want a \"trash can\"-like behavior. For this, I create the following script and store it as `/Users/jb/bin/onlylatest.sh` \(i.e. the `bin` directory in my home directory\):
 
-``` {.sourceCode .bash}
-#!/bin/sh
+\`\`\` {.sourceCode .bash}
+
+## !/bin/sh
+
 set -eu
 
-# Where I want my versions stored
+## Where I want my versions stored
+
 versionspath=~/.trashcan
 
-# The parameters we get from Syncthing
-folderpath="$1"
-filepath="$2"
+## The parameters we get from Syncthing
 
-# First ensure the dir where we need to store the file exists
-outpath=`dirname "$versionspath/$filepath"`
-mkdir -p "$outpath"
-# Then move the file there
+folderpath="$1" filepath="$2"
+
+## First ensure the dir where we need to store the file exists
+
+outpath=`dirname "$versionspath/$filepath"` mkdir -p "$outpath"
+
+## Then move the file there
+
 mv -f "$folderpath/$filepath" "$versionspath/$filepath"
-```
 
+```text
 I must ensure that the script has execute permissions
 (`chmod 755 onlylatest.sh`), then configure Syncthing with command
 `/Users/jb/bin/onlylatest.sh %FOLDER_PATH% %FILE_PATH%`
@@ -162,6 +123,5 @@ if not exist "%OUTPUT_PATH%" mkdir "%OUTPUT_PATH%" || exit /B
 move /Y "%FOLDER_PATH%\%FILE_PATH%" "%VERSIONS_PATH%\%FILE_PATH%"
 ```
 
-Finally, I set
-`C:\Users\mfrnd\Scripts\onlylatest.bat %FOLDER_PATH% %FILE_PATH%` as
-command name in Syncthing.
+Finally, I set `C:\Users\mfrnd\Scripts\onlylatest.bat %FOLDER_PATH% %FILE_PATH%` as command name in Syncthing.
+

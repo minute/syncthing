@@ -1,17 +1,8 @@
-Starting
-========
+# events/starting.md
 
-Emitted exactly once, when Syncthing starts, before parsing
-configuration etc.
+Emitted exactly once, when Syncthing starts, before parsing configuration etc.
 
-``` {.sourceCode .json}
-{
-    "id": 1,
-    "globalID": 1,
-    "type": "Starting",
-    "time": "2014-07-17T13:13:32.044470055+02:00",
-    "data": {
-        "home": "/home/jb/.config/syncthing"
-    }
-}
-```
+\`\`\` {.sourceCode .json} { "id": 1, "globalID": 1, "type": "Starting", "time": "2014-07-17T13:13:32.044470055+02:00", "data": { "home": "/home/jb/.config/syncthing" } }
+
+\`\`\`
+

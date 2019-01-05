@@ -1,4 +1,4 @@
-# Getting Started
+# intro/getting-started.md
 
 For this guide let’s assume you have two machines between which you want to synchronise files. In keeping with Syncthing terminology they are going to be called “devices” in the rest of the documentation. The “local device” is the one you are configuring, viewing status for, etc., while the “remote device” is the other machine.
 

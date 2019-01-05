@@ -1,10 +1,8 @@
-Usage
-=====
+# usage/index.md
 
-::: {.toctree maxdepth="1"}
-Command Line Operation \<syncthing\> faq releases
+::: {.toctree maxdepth="1"} Command Line Operation \ faq releases
 
-Configuration \<config\> advanced foldertypes introducer guilisten
+Configuration \ advanced foldertypes introducer guilisten
 
 syncing
 
@@ -14,5 +12,5 @@ ignoring versioning
 
 stdiscosrv strelaysrv custom-upgrades
 
-autostart contrib profiling reverseproxy security
-:::
+autostart contrib profiling reverseproxy security :::
+

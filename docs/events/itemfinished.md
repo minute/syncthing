@@ -1,25 +1,10 @@
-ItemFinished
-============
+# events/itemfinished.md
 
-Generated when Syncthing ends synchronizing a file to a newer version. A
-successful operation:
+Generated when Syncthing ends synchronizing a file to a newer version. A successful operation:
 
-``` {.sourceCode .json}
-{
-    "id": 93,
-    "globalID": 93,
-    "type": "ItemFinished",
-    "time": "2014-07-13T21:22:03.414609034+02:00",
-    "data": {
-        "item": "test.txt",
-        "folder": "default",
-        "error": null,
-        "type": "file",
-        "action": "update"
-    }
-}
-```
+\`\`\` {.sourceCode .json} { "id": 93, "globalID": 93, "type": "ItemFinished", "time": "2014-07-13T21:22:03.414609034+02:00", "data": { "item": "test.txt", "folder": "default", "error": null, "type": "file", "action": "update" } }
 
+```text
 An unsuccessful operation:
 
 ``` {.sourceCode .json}
@@ -38,9 +23,7 @@ An unsuccessful operation:
 }
 ```
 
-The `action` field is either `update` (contents changed), `metadata`
-(file metadata changed but not contents), or `delete`.
+The `action` field is either `update` \(contents changed\), `metadata` \(file metadata changed but not contents\), or `delete`.
 
-::: {.versionadded}
-0.11.10 The `metadata` action.
-:::
+::: {.versionadded} 0.11.10 The `metadata` action. :::
+
