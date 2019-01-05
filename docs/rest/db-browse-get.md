@@ -2,11 +2,11 @@
 
 {% api-method method="get" host="http://localhost:8384" path="/rest/db/browse" %}
 {% api-method-summary %}
-
+Returns the directory tree of the global model. 
 {% endapi-method-summary %}
 
 {% api-method-description %}
-Returns the directory tree of the global model. Directories are always JSON objects \(map/dictionary\), and files are always arrays of modification time and size. The first integer is the files modification time, and the second integer is the file size.  
+Directories are always JSON objects \(map/dictionary\), and files are always arrays of modification time and size. The first integer is the files modification time, and the second integer is the file size.  
   
 The call takes one mandatory `folder` parameter and two optional parameters. Optional parameter `levels` defines how deep within the tree we want to dwell down \(0 based, defaults to unlimited depth\) Optional parameter `prefix` defines a prefix within the tree where to start building the structure.
 {% endapi-method-description %}
@@ -14,16 +14,16 @@ The call takes one mandatory `folder` parameter and two optional parameters. Opt
 {% api-method-spec %}
 {% api-method-request %}
 {% api-method-query-parameters %}
+{% api-method-parameter name="folder" type="string" required=true %}
+Folder ID
+{% endapi-method-parameter %}
+
 {% api-method-parameter name="prefix" type="string" required=false %}
 Path prefix
 {% endapi-method-parameter %}
 
 {% api-method-parameter name="levels" type="integer" required=false %}
 Number of levels to recurse
-{% endapi-method-parameter %}
-
-{% api-method-parameter name="folder" type="string" required=true %}
-Folder ID
 {% endapi-method-parameter %}
 {% endapi-method-query-parameters %}
 {% endapi-method-request %}
