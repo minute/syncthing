@@ -1,12 +1,14 @@
 # rest/db-browse-get.md
 
-{% api-method method="get" host="" path="/rest/db/browse" %}
+{% api-method method="get" host="http://localhost:8384" path="/rest/db/browse" %}
 {% api-method-summary %}
 
 {% endapi-method-summary %}
 
 {% api-method-description %}
-
+Returns the directory tree of the global model. Directories are always JSON objects \(map/dictionary\), and files are always arrays of modification time and size. The first integer is the files modification time, and the second integer is the file size.  
+  
+The call takes one mandatory `folder` parameter and two optional parameters. Optional parameter `levels` defines how deep within the tree we want to dwell down \(0 based, defaults to unlimited depth\) Optional parameter `prefix` defines a prefix within the tree where to start building the structure.
 {% endapi-method-description %}
 
 {% api-method-spec %}
@@ -56,10 +58,6 @@ Folder ID
 {% endapi-method-response %}
 {% endapi-method-spec %}
 {% endapi-method %}
-
-Returns the directory tree of the global model. Directories are always JSON objects \(map/dictionary\), and files are always arrays of modification time and size. The first integer is the files modification time, and the second integer is the file size.
-
-The call takes one mandatory `folder` parameter and two optional parameters. Optional parameter `levels` defines how deep within the tree we want to dwell down \(0 based, defaults to unlimited depth\) Optional parameter `prefix` defines a prefix within the tree where to start building the structure.
 
 {% hint style="danger" %}
 This is an expensive call, increasing CPU and RAM usage on the device. Use sparingly.
