@@ -7,8 +7,8 @@
 * [Project Presentation](intro/project-presentation.md)
 * [Getting Started](intro/getting-started.md)
 
-## Users
+## Usage
 
-* [Ignoring Files](users/ignoring-files.md)
-* [Release Channels](users/release-channels.md)
+* [Ignoring Files](usage/ignoring-files.md)
+* [Release Channels](usage/release-channels.md)
 
