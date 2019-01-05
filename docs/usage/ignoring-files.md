@@ -10,7 +10,7 @@
 
 If some files should not be synchronized to other devices, a file called `.stignore` can be created containing file patterns to ignore. The `.stignore` file must be placed in the root of the folder. The `.stignore` file itself will never be synced to other devices, although it can `#include` files that _are_ synchronized between devices. All patterns are relative to the folder root.
 
-{% hint style="info" %}
+{% hint style="warning" %}
 Note that ignored files can block removal of an otherwise empty directory. See below for the \(?d\) prefix to allow deletion of ignored files.
 {% endhint %}
 
@@ -31,7 +31,7 @@ The `.stignore` file contains a list of file or path patterns. The _first_ patte
 * A line beginning with `//` is a comment and has no effect.
 * Windows does not support escaping `\[foo - bar\]`.
 
-{% hint style="info" %}
+{% hint style="warning" %}
 Prefixes can be specified in any order \(e.g. “\(?d\)\(?i\)”\), but cannot be in a single pair of parentheses \(not “\(?di\)”\).
 {% endhint %}
 
@@ -83,7 +83,7 @@ My Pictures/  # ignored, matched case insensitive "(?i)my pictures" pattern
     Img15.PNG # ignored, due to parent being ignored
 ```
 
-{% hint style="info" %}
+{% hint style="warning" %}
 Please note that directory patterns ending with a slash `some/directory/` matches the content of the directory, but not the directory itself. If you want the pattern to match the directory and its content, make sure it does not have a `/` at the end of the pattern.
 {% endhint %}
 
