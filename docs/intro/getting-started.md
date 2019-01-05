@@ -8,7 +8,7 @@ A film version of this transcript is available on YouTube \(contributed by @thei
 
 ## Installing
 
-We suggest you have a look at the [Community Contributions](https://docs.syncthing.net/users/contrib.html#contributions) which let you pick a flavor of Syncthing that best fits your scenario. For example, if you are interested in a cross-platform GUI application you can check out [Syncthing-GTK](https://github.com/syncthing/syncthing-gtk). The community has also developed Windows, Android and many more specific flavors that help you run Syncthing on your devices. Currently all community flavors run the same Syncthing core underneath, so don’t worry about changing your flavor at a later point in time. The remainder of this page will explain how to set up two devices with the core Syncthing flavor.
+We suggest you have a look at the [Community Contributions](../usage/community-contributions.md) which let you pick a flavor of Syncthing that best fits your scenario. For example, if you are interested in a cross-platform GUI application you can check out [Syncthing-GTK](https://github.com/syncthing/syncthing-gtk). The community has also developed Windows, Android and many more specific flavors that help you run Syncthing on your devices. Currently all community flavors run the same Syncthing core underneath, so don’t worry about changing your flavor at a later point in time. The remainder of this page will explain how to set up two devices with the core Syncthing flavor.
 
 ### Syncthing
 

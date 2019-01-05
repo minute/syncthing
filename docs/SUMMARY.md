@@ -11,4 +11,5 @@
 
 * [Ignoring Files](usage/ignoring-files.md)
 * [Release Channels](usage/release-channels.md)
+* [Community Contributions](usage/community-contributions.md)
 
