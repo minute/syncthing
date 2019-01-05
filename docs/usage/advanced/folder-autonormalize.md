@@ -2,9 +2,9 @@
 
 `autoNormalize` is an advanced folder setting that affects the handling of files with incorrect UTF-8 normalization in their name. When set, such files are renamed to the correctly normalized form during scanning.
 
-::: {.note} ::: {.admonition-title} Note :::
-
-This option should normally be set to `true`. :::
+{% hint style="warning" %}
+This option should normally be set to `true`.
+{% endhint %}
 
 ## Background
 

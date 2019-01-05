@@ -2,12 +2,46 @@
 
 * [Welcome](README.md)
 
-## Advanced
+## Intro
 
-* [Allowed Networks](advanced/device-allowednetworks.md)
-* [Auto Normalize](advanced/folder-autonormalize.md)
-* [Ignore Delete](advanced/folder-ignoredelete.md)
-* [Large Blocks](advanced/folder-uselargeblocks.md)
+* [Getting Started](intro/getting-started.md)
+* [Project Presentation](intro/project-presentation.md)
+
+## Usage
+
+* [Advanced Configuration](usage/advanced/README.md)
+  * [Allowed Networks](usage/advanced/device-allowednetworks.md)
+  * [Auto Normalize](usage/advanced/folder-autonormalize.md)
+  * [Large Blocks](usage/advanced/folder-uselargeblocks.md)
+  * [Ignore Delete](usage/advanced/folder-ignoredelete.md)
+* [usage/autostart.md](usage/autostart.md)
+* [usage/community-contributions.md](usage/community-contributions.md)
+* [usage/config.md](usage/config.md)
+* [usage/contrib.md](usage/contrib.md)
+* [usage/custom-upgrades.md](usage/custom-upgrades.md)
+* [usage/faq.md](usage/faq.md)
+* [usage/firewall.md](usage/firewall.md)
+* [usage/foldermaster.md](usage/foldermaster.md)
+* [usage/foldertypes.md](usage/foldertypes.md)
+* [usage/guilisten.md](usage/guilisten.md)
+* [usage/ignoring-files.md](usage/ignoring-files.md)
+* [usage/ignoring.md](usage/ignoring.md)
+* [usage/index.md](usage/index.md)
+* [usage/introducer.md](usage/introducer.md)
+* [usage/profiling.md](usage/profiling.md)
+* [usage/proxying.md](usage/proxying.md)
+* [usage/relaying.md](usage/relaying.md)
+* [usage/release-channels.md](usage/release-channels.md)
+* [usage/releases.md](usage/releases.md)
+* [usage/reverseproxy.md](usage/reverseproxy.md)
+* [usage/security.md](usage/security.md)
+* [usage/stdiscosrv.md](usage/stdiscosrv.md)
+* [usage/strelaysrv.md](usage/strelaysrv.md)
+* [usage/syncing.md](usage/syncing.md)
+* [usage/syncthing.md](usage/syncthing.md)
+* [usage/versioning.md](usage/versioning.md)
+
+## Advanced
 
 ## Dev
 
@@ -23,39 +57,6 @@
 * [dev/release-creation.md](dev/release-creation.md)
 * [dev/release-signing.md](dev/release-signing.md)
 * [dev/rest.md](dev/rest.md)
-
-## Events
-
-* [events/configsaved.md](events/configsaved.md)
-* [events/deviceconnected.md](events/deviceconnected.md)
-* [events/devicedisconnected.md](events/devicedisconnected.md)
-* [events/devicediscovered.md](events/devicediscovered.md)
-* [events/devicepaused.md](events/devicepaused.md)
-* [events/devicerejected.md](events/devicerejected.md)
-* [events/deviceresumed.md](events/deviceresumed.md)
-* [events/downloadprogress.md](events/downloadprogress.md)
-* [events/foldercompletion.md](events/foldercompletion.md)
-* [events/foldererrors.md](events/foldererrors.md)
-* [events/folderrejected.md](events/folderrejected.md)
-* [events/folderscanprogress.md](events/folderscanprogress.md)
-* [events/foldersummary.md](events/foldersummary.md)
-* [events/itemfinished.md](events/itemfinished.md)
-* [events/itemstarted.md](events/itemstarted.md)
-* [events/listenaddresseschanged.md](events/listenaddresseschanged.md)
-* [events/localchangedetected.md](events/localchangedetected.md)
-* [events/localindexupdated.md](events/localindexupdated.md)
-* [events/loginattempt.md](events/loginattempt.md)
-* [events/remotechangedetected.md](events/remotechangedetected.md)
-* [events/remotedownloadprogress.md](events/remotedownloadprogress.md)
-* [events/remoteindexupdated.md](events/remoteindexupdated.md)
-* [events/starting.md](events/starting.md)
-* [events/startupcomplete.md](events/startupcomplete.md)
-* [events/statechanged.md](events/statechanged.md)
-
-## Intro
-
-* [intro/getting-started.md](intro/getting-started.md)
-* [intro/project-presentation.md](intro/project-presentation.md)
 
 ## REST
 
@@ -102,6 +103,34 @@
 * [rest/system-upgrade-post.md](rest/system-upgrade-post.md)
 * [rest/system-version-get.md](rest/system-version-get.md)
 
+## Events
+
+* [events/configsaved.md](events/configsaved.md)
+* [events/deviceconnected.md](events/deviceconnected.md)
+* [events/devicedisconnected.md](events/devicedisconnected.md)
+* [events/devicediscovered.md](events/devicediscovered.md)
+* [events/devicepaused.md](events/devicepaused.md)
+* [events/devicerejected.md](events/devicerejected.md)
+* [events/deviceresumed.md](events/deviceresumed.md)
+* [events/downloadprogress.md](events/downloadprogress.md)
+* [events/foldercompletion.md](events/foldercompletion.md)
+* [events/foldererrors.md](events/foldererrors.md)
+* [events/folderrejected.md](events/folderrejected.md)
+* [events/folderscanprogress.md](events/folderscanprogress.md)
+* [events/foldersummary.md](events/foldersummary.md)
+* [events/itemfinished.md](events/itemfinished.md)
+* [events/itemstarted.md](events/itemstarted.md)
+* [events/listenaddresseschanged.md](events/listenaddresseschanged.md)
+* [events/localchangedetected.md](events/localchangedetected.md)
+* [events/localindexupdated.md](events/localindexupdated.md)
+* [events/loginattempt.md](events/loginattempt.md)
+* [events/remotechangedetected.md](events/remotechangedetected.md)
+* [events/remotedownloadprogress.md](events/remotedownloadprogress.md)
+* [events/remoteindexupdated.md](events/remoteindexupdated.md)
+* [events/starting.md](events/starting.md)
+* [events/startupcomplete.md](events/startupcomplete.md)
+* [events/statechanged.md](events/statechanged.md)
+
 ## Specs
 
 * [specs/bep-v1.md](specs/bep-v1.md)
@@ -109,34 +138,4 @@
 * [specs/index.md](specs/index.md)
 * [specs/localdisco-v4.md](specs/localdisco-v4.md)
 * [specs/relay-v1.md](specs/relay-v1.md)
-
-## Usage
-
-* [usage/advanced.md](usage/advanced.md)
-* [usage/autostart.md](usage/autostart.md)
-* [usage/community-contributions.md](usage/community-contributions.md)
-* [usage/config.md](usage/config.md)
-* [usage/contrib.md](usage/contrib.md)
-* [usage/custom-upgrades.md](usage/custom-upgrades.md)
-* [usage/faq.md](usage/faq.md)
-* [usage/firewall.md](usage/firewall.md)
-* [usage/foldermaster.md](usage/foldermaster.md)
-* [usage/foldertypes.md](usage/foldertypes.md)
-* [usage/guilisten.md](usage/guilisten.md)
-* [usage/ignoring-files.md](usage/ignoring-files.md)
-* [usage/ignoring.md](usage/ignoring.md)
-* [usage/index.md](usage/index.md)
-* [usage/introducer.md](usage/introducer.md)
-* [usage/profiling.md](usage/profiling.md)
-* [usage/proxying.md](usage/proxying.md)
-* [usage/relaying.md](usage/relaying.md)
-* [usage/release-channels.md](usage/release-channels.md)
-* [usage/releases.md](usage/releases.md)
-* [usage/reverseproxy.md](usage/reverseproxy.md)
-* [usage/security.md](usage/security.md)
-* [usage/stdiscosrv.md](usage/stdiscosrv.md)
-* [usage/strelaysrv.md](usage/strelaysrv.md)
-* [usage/syncing.md](usage/syncing.md)
-* [usage/syncthing.md](usage/syncthing.md)
-* [usage/versioning.md](usage/versioning.md)
 

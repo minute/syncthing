@@ -14,5 +14,5 @@ When large blocks are _not_ enabled, local changes to any given file are indexed
 
 When two devices do not agree on the desired block size for a file, the entire file must be transferred instead of only the changed blocks. To avoid frequent block size changes for files straddling a threshold boundary there is a certain elasticity or hysteresis built in to the system. The block size of an existing file is only changed when the difference in block size exceeds one level, i.e., from 256 KiB to 1 MiB, but not from 256 KiB to 512 KiB.
 
-At some point in the future, \[useLargeBlocks\]{.title-ref} will start defaulting to \[true\]{.title-ref}. At some further point in the future, the setting will be removed and large blocks will be the only mode of operation.
+At some point in the future, [Large Blocks](folder-uselargeblocks.md) will start defaulting to `true`. At some further point in the future, the setting will be removed and large blocks will be the only mode of operation.
 

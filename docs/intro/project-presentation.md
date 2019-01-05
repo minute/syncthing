@@ -1,4 +1,4 @@
-# intro/project-presentation.md
+# Project Presentation
 
 ## Syncthing
 
