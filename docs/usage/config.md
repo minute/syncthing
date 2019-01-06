@@ -1,4 +1,4 @@
-# usage/config.md
+# Configuration
 
 ## Synopsis
 
@@ -13,25 +13,11 @@ $HOME/Library/Application Support/Syncthing
 
 Syncthing uses a single directory to store configuration, crypto keys and index caches. The location defaults to `$HOME/.config/syncthing` \(Unix-like\), `$HOME/Library/Application Support/Syncthing` \(Mac\), `%AppData%/Syncthing` \(Windows XP\) or `%LocalAppData%/Syncthing` \(Windows 7+\). It can be changed at runtime using the `-home` flag. In this directory the following files are located:
 
-`config.xml`{.interpreted-text role="file"}
-
-: The configuration file, in XML format.
-
-`cert.pem`{.interpreted-text role="file"}, `key.pem`{.interpreted-text role="file"}
-
-: The device\'s RSA public and private key. These form the basis for the device ID. The key must be kept private.
-
-`https-cert.pem`{.interpreted-text role="file"}, `https-key.pem`{.interpreted-text role="file"}
-
-: The certificate and key for HTTPS GUI connections. These may be replaced with a custom certificate for HTTPS as desired.
-
-`index-{*}.db`{.interpreted-text role="file"}
-
-: A directory holding the database with metadata and hashes of the files currently on disk and available from peers.
-
-`csrftokens.txt`{.interpreted-text role="file"}
-
-: A list of recently issued CSRF tokens \(for protection against browser cross site request forgery\).
+* config.xml: The configuration file, in XML format.
+* cert.pem, key.pem: The device's RSA public and private key. These form the basis for the device ID. The key must be kept private.
+* https-cert.pem, https-key.pem: The certificate and key for HTTPS GUI connections. These may be replaced with a custom certificate for HTTPS as desired.
+* index-\*.db: A directory holding the database with metadata and hashes of the files currently on disk and available from peers.
+* csrftokens.txt: A list of recently issued CSRF tokens \(for protection against browser cross site request forgery\).
 
 ## Config File Format
 

@@ -1,8 +1,11 @@
-# usage/community-contributions.md
+---
+description: >-
+  This page lists integrations, addons and packagings of Syncthing created by
+  the community. Like all documentation pages, it’s wiki editable so please do
+  edit and add your own.
+---
 
-
-
-This page lists integrations, addons and packagings of Syncthing created by the community. Like all documentation pages, it’s wiki editable so please do edit and add your own.
+# Community Contributions
 
 ## GUI Wrappers
 

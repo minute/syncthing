@@ -9,14 +9,14 @@
 
 ## Usage
 
+* [Community Contributions](usage/community-contributions.md)
+* [Configuration](usage/config.md)
 * [Advanced Configuration](usage/advanced/README.md)
   * [Allowed Networks](usage/advanced/device-allowednetworks.md)
   * [Auto Normalize](usage/advanced/folder-autonormalize.md)
   * [Ignore Delete](usage/advanced/folder-ignoredelete.md)
   * [Large Blocks](usage/advanced/folder-uselargeblocks.md)
 * [usage/autostart.md](usage/autostart.md)
-* [usage/community-contributions.md](usage/community-contributions.md)
-* [usage/config.md](usage/config.md)
 * [usage/contrib.md](usage/contrib.md)
 * [usage/custom-upgrades.md](usage/custom-upgrades.md)
 * [usage/faq.md](usage/faq.md)

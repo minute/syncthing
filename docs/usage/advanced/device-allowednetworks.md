@@ -6,10 +6,10 @@ By setting this to a comma separated list of networks, connections to the given 
 
 Given a value of `192.168.0.0/16, 172.16.0.0/12, 2001:db8::/32` Syncthing will:
 
-* Allow connections from the device from addresses in the specifiednetworks.
-* Reject connections from the device from addresses outside thespecified networks.
-* Attempt connections to addresses in the specified networks\(manually configured or discovered\).
-* Not attempt connections to addresses outside the specifiednetworks, regardless of whether manually configured orautomatically discovered.
+* Allow connections from the device from addresses in the specified networks.
+* Reject connections from the device from addresses outside the specified networks.
+* Attempt connections to addresses in the specified networks \(manually configured or discovered\).
+* Not attempt connections to addresses outside the specified networks, regardless of whether manually configured or automatically discovered.
 
 Allowed values are numeric IPv4 and IPv6 prefixes in CIDR format, as in the example. Hostnames, netmasks in octet format, etc., are not supported.
 
