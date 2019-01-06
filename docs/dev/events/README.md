@@ -1,4 +1,4 @@
-# dev/events.md
+# Events
 
 ## Description
 
