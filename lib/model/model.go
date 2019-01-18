@@ -997,6 +997,7 @@ func (m *Model) ClusterConfig(deviceID protocol.DeviceID, cm protocol.ClusterCon
 
 	m.fmut.Lock()
 	var paused []string
+	var usesLargeBlocks []string
 	for _, folder := range cm.Folders {
 		cfg, ok := m.cfg.Folder(folder.ID)
 		if !ok || !cfg.SharedWith(deviceID) {
@@ -1029,6 +1030,10 @@ func (m *Model) ClusterConfig(deviceID protocol.DeviceID, cm protocol.ClusterCon
 
 		if !folder.DisableTempIndexes {
 			tempIndexFolders = append(tempIndexFolders, folder.ID)
+		}
+
+		if folder.LargeBlocks && !cfg.UseLargeBlocks {
+			usesLargeBlocks = append(usesLargeBlocks, folder.ID)
 		}
 
 		myIndexID := fs.IndexID(protocol.LocalDeviceID)
@@ -1132,6 +1137,19 @@ func (m *Model) ClusterConfig(deviceID protocol.DeviceID, cm protocol.ClusterCon
 		}
 	}
 	m.fmut.Unlock()
+
+	// Set large blocks on folders that need it
+	for _, folderID := range usesLargeBlocks {
+		folderCfg, ok := m.cfg.Folder(folderID)
+		if !ok {
+			continue
+		}
+
+		l.Infoln("Enabling large blocks on folder", folderCfg.Description(), "because peer device", deviceID, "uses it")
+		folderCfg.UseLargeBlocks = true
+		m.cfg.SetFolder(folderCfg)
+		changed = true
+	}
 
 	if changed {
 		if err := m.cfg.Save(); err != nil {
@@ -2168,6 +2186,7 @@ func (m *Model) generateClusterConfig(device protocol.DeviceID) protocol.Cluster
 			IgnoreDelete:       folderCfg.IgnoreDelete,
 			DisableTempIndexes: folderCfg.DisableTempIndexes,
 			Paused:             folderCfg.Paused,
+			LargeBlocks:        folderCfg.UseLargeBlocks,
 		}
 
 		var fs *db.FileSet

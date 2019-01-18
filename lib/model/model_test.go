@@ -3878,3 +3878,36 @@ func TestSanitizePath(t *testing.T) {
 		}
 	}
 }
+
+func TestEnableLargeBlocks(t *testing.T) {
+	testOs := &fatalOs{t}
+
+	// Create a separate wrapper not to pollute other tests.
+	cfg := defaultCfgWrapper.RawCopy()
+	wrapper := createTmpWrapper(cfg)
+	defer testOs.Remove(wrapper.ConfigPath())
+
+	db := db.OpenMemory()
+	m := NewModel(wrapper, protocol.LocalDeviceID, "syncthing", "dev", db, nil)
+	m.AddFolder(defaultFolderConfig)
+	m.StartFolder("default")
+	m.ServeBackground()
+	defer m.Stop()
+
+	if cfg, _ := wrapper.Folder("default"); cfg.UseLargeBlocks {
+		t.Fatal("unsuitable start condition")
+	}
+
+	m.AddConnection(&fakeConnection{id: device1}, protocol.HelloResult{})
+
+	cc := protocol.ClusterConfig{
+		Folders: []protocol.Folder{
+			{ID: "default", LargeBlocks: true},
+		},
+	}
+	m.ClusterConfig(device1, cc)
+
+	if cfg, _ := wrapper.Folder("default"); !cfg.UseLargeBlocks {
+		t.Fatal("large blocks should have been enabled")
+	}
+}
