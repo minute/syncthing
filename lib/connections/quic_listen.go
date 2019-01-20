@@ -1,4 +1,4 @@
-// Copyright (C) 2016 The Syncthing Authors.
+// Copyright (C) 2019 The Syncthing Authors.
 //
 // This Source Code Form is subject to the terms of the Mozilla Public
 // License, v. 2.0. If a copy of the MPL was not distributed with this file,
@@ -19,13 +19,13 @@ import (
 )
 
 func init() {
-	factory := &tcpListenerFactory{}
-	for _, scheme := range []string{"tcp", "tcp4", "tcp6"} {
+	factory := &quicListenerFactory{}
+	for _, scheme := range []string{"quic", "quic4", "quic6"} {
 		listeners[scheme] = factory
 	}
 }
 
-type tcpListener struct {
+type quicListener struct {
 	onAddressesChangedNotifier
 
 	uri     *url.URL
@@ -42,7 +42,7 @@ type tcpListener struct {
 	mut sync.RWMutex
 }
 
-func (t *tcpListener) Serve() {
+func (t *quicListener) Serve() {
 	t.mut.Lock()
 	t.err = nil
 	t.mut.Unlock()
@@ -137,15 +137,15 @@ func (t *tcpListener) Serve() {
 	}
 }
 
-func (t *tcpListener) Stop() {
+func (t *quicListener) Stop() {
 	close(t.stop)
 }
 
-func (t *tcpListener) URI() *url.URL {
+func (t *quicListener) URI() *url.URL {
 	return t.uri
 }
 
-func (t *tcpListener) WANAddresses() []*url.URL {
+func (t *quicListener) WANAddresses() []*url.URL {
 	uris := t.LANAddresses()
 	t.mut.RLock()
 	if t.mapping != nil {
@@ -170,32 +170,32 @@ func (t *tcpListener) WANAddresses() []*url.URL {
 	return uris
 }
 
-func (t *tcpListener) LANAddresses() []*url.URL {
+func (t *quicListener) LANAddresses() []*url.URL {
 	return []*url.URL{t.uri}
 }
 
-func (t *tcpListener) Error() error {
+func (t *quicListener) Error() error {
 	t.mut.RLock()
 	err := t.err
 	t.mut.RUnlock()
 	return err
 }
 
-func (t *tcpListener) String() string {
+func (t *quicListener) String() string {
 	return t.uri.String()
 }
 
-func (t *tcpListener) Factory() listenerFactory {
+func (t *quicListener) Factory() listenerFactory {
 	return t.factory
 }
 
-func (t *tcpListener) NATType() string {
+func (t *quicListener) NATType() string {
 	return "unknown"
 }
 
-type tcpListenerFactory struct{}
+type quicListenerFactory struct{}
 
-func (f *tcpListenerFactory) New(uri *url.URL, cfg *config.Wrapper, tlsCfg *tls.Config, conns chan internalConn, natService *nat.Service) genericListener {
+func (f *quicListenerFactory) New(uri *url.URL, cfg *config.Wrapper, tlsCfg *tls.Config, conns chan internalConn, natService *nat.Service) genericListener {
 	return &tcpListener{
 		uri:        fixupPort(uri, config.DefaultTCPPort),
 		cfg:        cfg,
@@ -207,7 +207,7 @@ func (f *tcpListenerFactory) New(uri *url.URL, cfg *config.Wrapper, tlsCfg *tls.
 	}
 }
 
-func (tcpListenerFactory) Valid(_ config.Configuration) error {
+func (quicListenerFactory) Valid(_ config.Configuration) error {
 	// Always valid
 	return nil
 }

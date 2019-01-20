@@ -159,20 +159,10 @@ func NewService(cfg *config.Wrapper, myID protocol.DeviceID, mdl Model, tlsCfg *
 func (s *Service) handle() {
 next:
 	for c := range s.conns {
-		cs := c.ConnectionState()
-
-		// We should have negotiated the next level protocol "bep/1.0" as part
-		// of the TLS handshake. Unfortunately this can't be a hard error,
-		// because there are implementations out there that don't support
-		// protocol negotiation (iOS for one...).
-		if !cs.NegotiatedProtocolIsMutual || cs.NegotiatedProtocol != s.bepProtocolName {
-			l.Infof("Peer at %s did not negotiate bep/1.0", c)
-		}
-
 		// We should have received exactly one certificate from the other
 		// side. If we didn't, they don't have a device ID and we drop the
 		// connection.
-		certs := cs.PeerCertificates
+		certs := c.PeerCertificates()
 		if cl := len(certs); cl != 1 {
 			l.Infof("Got peer certificate list of length %d != 1 from peer at %s; protocol error", cl, c)
 			c.Close()
@@ -275,7 +265,7 @@ next:
 		protoConn := protocol.NewConnection(remoteID, rd, wr, s.model, c.String(), deviceCfg.Compression)
 		modelConn := completeConn{c, protoConn}
 
-		l.Infof("Established secure connection to %s at %s (%s)", remoteID, c, tlsCipherSuiteNames[c.ConnectionState().CipherSuite])
+		l.Infof("Established secure connection to %s at %s", remoteID, c)
 
 		s.model.AddConnection(modelConn, hello)
 		continue next

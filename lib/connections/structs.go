@@ -8,6 +8,7 @@ package connections
 
 import (
 	"crypto/tls"
+	"crypto/x509"
 	"fmt"
 	"net"
 	"net/url"
@@ -45,9 +46,14 @@ func (c completeConn) Close(err error) {
 // internalConn is the raw TLS connection plus some metadata on where it
 // came from (type, priority).
 type internalConn struct {
-	*tls.Conn
+	secureConn
 	connType connType
 	priority int
+}
+
+type secureConn interface {
+	net.Conn
+	PeerCertificates() []*x509.Certificate
 }
 
 type connType int
@@ -57,6 +63,8 @@ const (
 	connTypeRelayServer
 	connTypeTCPClient
 	connTypeTCPServer
+	connTypeQUICClient
+	connTypeQUICServer
 )
 
 func (t connType) String() string {
@@ -69,6 +77,10 @@ func (t connType) String() string {
 		return "tcp-client"
 	case connTypeTCPServer:
 		return "tcp-server"
+	case connTypeQUICClient:
+		return "quic-client"
+	case connTypeQUICServer:
+		return "quic-server"
 	default:
 		return "unknown-type"
 	}
@@ -80,6 +92,8 @@ func (t connType) Transport() string {
 		return "relay"
 	case connTypeTCPClient, connTypeTCPServer:
 		return "tcp"
+	case connTypeQUICClient, connTypeQUICServer:
+		return "quic"
 	default:
 		return "unknown"
 	}
@@ -90,7 +104,7 @@ func (c internalConn) Close() {
 	// sends a TLS alert message, which might block forever if the
 	// connection is dead and we don't have a deadline set.
 	c.SetWriteDeadline(time.Now().Add(250 * time.Millisecond))
-	c.Conn.Close()
+	c.secureConn.Close()
 }
 
 func (c internalConn) Type() string {
@@ -204,4 +218,12 @@ func (t dialTarget) Dial() (internalConn, error) {
 		l.Debugln("dialing", t.deviceID, t.uri, "success:", conn)
 	}
 	return conn, err
+}
+
+type tlsConnection struct {
+	*tls.Conn
+}
+
+func (c tlsConnection) PeerCertificates() []*x509.Certificate {
+	return c.ConnectionState().PeerCertificates
 }

@@ -4,9 +4,11 @@ require (
 	github.com/AudriusButkevicius/cli v0.0.0-20140727204646-7f561c78b5a4
 	github.com/AudriusButkevicius/go-nat-pmp v0.0.0-20160522074932-452c97607362
 	github.com/beorn7/perks v0.0.0-20160804104726-4c0e84591b9a // indirect
+	github.com/bifurcation/mint v0.0.0-20181105071958-a14404e9a861 // indirect
 	github.com/bkaradzic/go-lz4 v0.0.0-20160924222819-7224d8d8f27e
 	github.com/calmh/du v1.0.1
 	github.com/calmh/xdr v1.1.0
+	github.com/cheekybits/genny v1.0.0 // indirect
 	github.com/chmduquesne/rollinghash v0.0.0-20180912150627-a60f8e7142b5
 	github.com/d4l3k/messagediff v1.2.1
 	github.com/davecgh/go-spew v1.1.1 // indirect
@@ -15,10 +17,14 @@ require (
 	github.com/golang/groupcache v0.0.0-20171101203131-84a468cf14b4
 	github.com/golang/protobuf v0.0.0-20171113180720-1e59b77b52bf // indirect
 	github.com/golang/snappy v0.0.0-20170215233205-553a64147049 // indirect
+	github.com/hashicorp/golang-lru v0.5.0 // indirect
 	github.com/jackpal/gateway v0.0.0-20161225004348-5795ac81146e
 	github.com/kballard/go-shellquote v0.0.0-20170619183022-cd60e84ee657
 	github.com/kr/pretty v0.1.0 // indirect
 	github.com/lib/pq v1.0.0
+	github.com/lucas-clemente/aes12 v0.0.0-20171027163421-cd47fb39b79f // indirect
+	github.com/lucas-clemente/quic-go v0.10.1
+	github.com/lucas-clemente/quic-go-certificates v0.0.0-20160823095156-d2f86524cced // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/minio/sha256-simd v0.0.0-20190117184323-cc1980cb0338
 	github.com/onsi/ginkgo v0.0.0-20171221013426-6c46eb8334b3 // indirect

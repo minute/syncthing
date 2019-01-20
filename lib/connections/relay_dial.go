@@ -61,7 +61,7 @@ func (d *relayDialer) Dial(id protocol.DeviceID, uri *url.URL) (internalConn, er
 		return internalConn{}, err
 	}
 
-	return internalConn{tc, connTypeRelayClient, relayPriority}, nil
+	return internalConn{tlsConnection{tc}, connTypeRelayClient, relayPriority}, nil
 }
 
 func (d *relayDialer) RedialFrequency() time.Duration {

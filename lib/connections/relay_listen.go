@@ -102,7 +102,7 @@ func (t *relayListener) Serve() {
 				continue
 			}
 
-			t.conns <- internalConn{tc, connTypeRelayServer, relayPriority}
+			t.conns <- internalConn{tlsConnection{tc}, connTypeRelayServer, relayPriority}
 
 		// Poor mans notifier that informs the connection service that the
 		// relay URI has changed. This can only happen when we connect to a

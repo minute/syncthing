@@ -53,7 +53,7 @@ func (d *tcpDialer) Dial(id protocol.DeviceID, uri *url.URL) (internalConn, erro
 		return internalConn{}, err
 	}
 
-	return internalConn{tc, connTypeTCPClient, tcpPriority}, nil
+	return internalConn{tlsConnection{tc}, connTypeTCPClient, tcpPriority}, nil
 }
 
 func (d *tcpDialer) RedialFrequency() time.Duration {

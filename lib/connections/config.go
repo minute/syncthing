@@ -7,6 +7,7 @@
 package connections
 
 const (
+	quicPriority  = 5
 	tcpPriority   = 10
 	relayPriority = 200
 )
