@@ -13,8 +13,9 @@ import (
 	"sync"
 	"time"
 
+	quic "github.com/lucas-clemente/quic-go"
+
 	"github.com/syncthing/syncthing/lib/config"
-	"github.com/syncthing/syncthing/lib/dialer"
 	"github.com/syncthing/syncthing/lib/nat"
 )
 
@@ -26,17 +27,12 @@ func init() {
 }
 
 type quicListener struct {
-	onAddressesChangedNotifier
-
 	uri     *url.URL
 	cfg     *config.Wrapper
 	tlsCfg  *tls.Config
 	stop    chan struct{}
 	conns   chan internalConn
 	factory listenerFactory
-
-	natService *nat.Service
-	mapping    *nat.Mapping
 
 	err error
 	mut sync.RWMutex
@@ -47,58 +43,53 @@ func (t *quicListener) Serve() {
 	t.err = nil
 	t.mut.Unlock()
 
-	tcaddr, err := net.ResolveTCPAddr(t.uri.Scheme, t.uri.Host)
+	tcaddr, err := net.ResolveUDPAddr(t.uri.Scheme, t.uri.Host)
 	if err != nil {
 		t.mut.Lock()
 		t.err = err
 		t.mut.Unlock()
-		l.Infoln("Listen (BEP/tcp):", err)
+		l.Infoln("Listen (BEP/QUIC):", err)
 		return
 	}
 
-	listener, err := net.ListenTCP(t.uri.Scheme, tcaddr)
+	listener, err := net.ListenUDP(t.uri.Scheme, tcaddr)
 	if err != nil {
 		t.mut.Lock()
 		t.err = err
 		t.mut.Unlock()
-		l.Infoln("Listen (BEP/tcp):", err)
+		l.Infoln("Listen (BEP/QUIC):", err)
 		return
 	}
 	defer listener.Close()
 
-	l.Infof("TCP listener (%v) starting", listener.Addr())
-	defer l.Infof("TCP listener (%v) shutting down", listener.Addr())
+	qlst, err := quic.Listen(listener, t.tlsCfg, nil)
+	if err != nil {
+		t.mut.Lock()
+		t.err = err
+		t.mut.Unlock()
+		l.Infoln("Listen (BEP/QUIC):", err)
+		return
+	}
 
-	mapping := t.natService.NewMapping(nat.TCP, tcaddr.IP, tcaddr.Port)
-	mapping.OnChanged(func(_ *nat.Mapping, _, _ []nat.Address) {
-		t.notifyAddressesChanged(t)
-	})
-	defer t.natService.RemoveMapping(mapping)
-
-	t.mut.Lock()
-	t.mapping = mapping
-	t.mut.Unlock()
+	l.Infof("QUIC listener (%v) starting", listener.LocalAddr())
+	defer l.Infof("QUIC listener (%v) shutting down", listener.LocalAddr())
 
 	acceptFailures := 0
 	const maxAcceptFailures = 10
 
 	for {
-		listener.SetDeadline(time.Now().Add(time.Second))
-		conn, err := listener.Accept()
+		sess, err := qlst.Accept()
 		select {
 		case <-t.stop:
 			if err == nil {
-				conn.Close()
+				sess.Close()
 			}
-			t.mut.Lock()
-			t.mapping = nil
-			t.mut.Unlock()
 			return
 		default:
 		}
 		if err != nil {
 			if err, ok := err.(*net.OpError); !ok || !err.Timeout() {
-				l.Warnln("Listen (BEP/tcp): Accepting connection:", err)
+				l.Warnln("Listen (BEP/QUIC): Accepting connection:", err)
 
 				acceptFailures++
 				if acceptFailures > maxAcceptFailures {
@@ -114,26 +105,16 @@ func (t *quicListener) Serve() {
 		}
 
 		acceptFailures = 0
-		l.Debugln("Listen (BEP/tcp): connect from", conn.RemoteAddr())
+		l.Debugln("Listen (BEP/QUIC): connect from", sess.RemoteAddr())
 
-		if err := dialer.SetTCPOptions(conn); err != nil {
-			l.Debugln("Listen (BEP/tcp): setting tcp options:", err)
-		}
-
-		if tc := t.cfg.Options().TrafficClass; tc != 0 {
-			if err := dialer.SetTrafficClass(conn, tc); err != nil {
-				l.Debugln("Listen (BEP/tcp): setting traffic class:", err)
-			}
-		}
-
-		tc := tls.Server(conn, t.tlsCfg)
-		if err := tlsTimedHandshake(tc); err != nil {
-			l.Infoln("Listen (BEP/tcp): TLS handshake:", err)
-			tc.Close()
+		strm, err := sess.AcceptStream()
+		if err != nil {
+			l.Warnln("Listen (BEP/QUIC): Accepting connection:", err)
+			sess.Close()
 			continue
 		}
 
-		t.conns <- internalConn{tlsConnection{tc}, connTypeTCPServer, tcpPriority}
+		t.conns <- internalConn{quicConnection{sess, strm}, connTypeQUICServer, quicPriority}
 	}
 }
 
@@ -146,28 +127,7 @@ func (t *quicListener) URI() *url.URL {
 }
 
 func (t *quicListener) WANAddresses() []*url.URL {
-	uris := t.LANAddresses()
-	t.mut.RLock()
-	if t.mapping != nil {
-		addrs := t.mapping.ExternalAddresses()
-		for _, addr := range addrs {
-			uri := *t.uri
-			// Does net.JoinHostPort internally
-			uri.Host = addr.String()
-			uris = append(uris, &uri)
-
-			// For every address with a specified IP, add one without an IP,
-			// just in case the specified IP is still internal (router behind DMZ).
-			if len(addr.IP) != 0 && !addr.IP.IsUnspecified() {
-				uri = *t.uri
-				addr.IP = nil
-				uri.Host = addr.String()
-				uris = append(uris, &uri)
-			}
-		}
-	}
-	t.mut.RUnlock()
-	return uris
+	return []*url.URL{t.uri}
 }
 
 func (t *quicListener) LANAddresses() []*url.URL {
