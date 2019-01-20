@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"net"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,8 @@ func init() {
 }
 
 type quicListener struct {
+	onAddressesChangedNotifier
+
 	uri     *url.URL
 	cfg     *config.Wrapper
 	tlsCfg  *tls.Config
@@ -43,7 +46,8 @@ func (t *quicListener) Serve() {
 	t.err = nil
 	t.mut.Unlock()
 
-	tcaddr, err := net.ResolveUDPAddr(t.uri.Scheme, t.uri.Host)
+	netw := strings.Replace(strings.ToLower(t.uri.Scheme), "quic", "udp", 1)
+	tcaddr, err := net.ResolveUDPAddr(netw, t.uri.Host)
 	if err != nil {
 		t.mut.Lock()
 		t.err = err
@@ -52,7 +56,7 @@ func (t *quicListener) Serve() {
 		return
 	}
 
-	listener, err := net.ListenUDP(t.uri.Scheme, tcaddr)
+	listener, err := net.ListenUDP(netw, tcaddr)
 	if err != nil {
 		t.mut.Lock()
 		t.err = err
@@ -156,14 +160,13 @@ func (t *quicListener) NATType() string {
 type quicListenerFactory struct{}
 
 func (f *quicListenerFactory) New(uri *url.URL, cfg *config.Wrapper, tlsCfg *tls.Config, conns chan internalConn, natService *nat.Service) genericListener {
-	return &tcpListener{
-		uri:        fixupPort(uri, config.DefaultTCPPort),
-		cfg:        cfg,
-		tlsCfg:     tlsCfg,
-		conns:      conns,
-		natService: natService,
-		stop:       make(chan struct{}),
-		factory:    f,
+	return &quicListener{
+		uri:     fixupPort(uri, config.DefaultTCPPort),
+		cfg:     cfg,
+		tlsCfg:  tlsCfg,
+		conns:   conns,
+		stop:    make(chan struct{}),
+		factory: f,
 	}
 }
 

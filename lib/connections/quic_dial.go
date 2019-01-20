@@ -57,7 +57,7 @@ func (d *quicDialer) RedialFrequency() time.Duration {
 type quicDialerFactory struct{}
 
 func (quicDialerFactory) New(cfg *config.Wrapper, tlsCfg *tls.Config) genericDialer {
-	return &tcpDialer{
+	return &quicDialer{
 		cfg:    cfg,
 		tlsCfg: tlsCfg,
 	}
