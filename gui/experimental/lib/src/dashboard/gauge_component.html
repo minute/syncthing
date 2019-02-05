@@ -1,11 +1,6 @@
-<div class="my-1">
-    <svg [attr.viewBox]="viewBox">
-        <circle [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="white"></circle>
-        <circle [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="transparent" stroke="#e9ecef"
-            [attr.stroke-width]="segmentWidth"></circle>
+<svg [attr.viewBox]="viewBox">
+    <circle [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="white"></circle>
+    <circle [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="transparent" stroke="#e9ecef" [attr.stroke-width]="segmentWidth"></circle>
 
-        <circle *ngFor="let seg of sizedSegments" [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="transparent"
-            [attr.stroke]="seg.color" [attr.stroke-width]="segmentWidth" [attr.stroke-dashoffset]="seg.start"
-            [attr.stroke-dasharray]="seg.dashArray"></circle>
-    </svg>
-</div>
+    <circle *ngFor="let seg of sizedSegments" [attr.cx]="width / 2" [attr.cy]="centerY" [attr.r]="radius" fill="transparent" [attr.stroke]="seg.color" [attr.stroke-width]="segmentWidth" [attr.stroke-dashoffset]="seg.start" [attr.stroke-dasharray]="seg.dashArray"></circle>
+</svg>

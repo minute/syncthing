@@ -5,7 +5,10 @@ import 'gauge_component.dart';
 @Component(
   selector: 'folder',
   templateUrl: 'folder_component.html',
-  directives: [GaugeComponent],
+  directives: [
+    GaugeComponent,
+    NgIf,
+  ],
 )
 class FolderComponent {
   @Input()
@@ -35,5 +38,40 @@ class FolderInfo {
   double local;
   double remote;
   bool error;
+
   FolderInfo(this.label, this.local, this.remote, this.error);
+
+  String get percent => "${local.toStringAsFixed(1)} %";
+
+  FolderStatus get status {
+    if (error) {
+      return FolderStatus.errored;
+    }
+    if (local < 100) {
+      return FolderStatus.syncing;
+    }
+    return FolderStatus.upToDate;
+  }
+}
+
+class FolderStatus {
+  final int idx;
+
+  const FolderStatus(this.idx);
+
+  static const upToDate = FolderStatus(0);
+  static const syncing = FolderStatus(1);
+  static const errored = FolderStatus(2);
+
+  String toString() => {
+        upToDate.idx: "Up to date",
+        syncing.idx: "Syncing",
+        errored.idx: "Errored",
+      }[idx];
+
+  String get textClass => {
+        upToDate.idx: "text-success",
+        syncing.idx: "text-info",
+        errored.idx: "text-danger",
+      }[idx];
 }
