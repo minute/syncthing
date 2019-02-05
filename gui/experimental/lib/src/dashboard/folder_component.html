@@ -1,0 +1,13 @@
+<div class="card shadow my-2">
+    <h5 class="card-header">{{folderInfo.label}}</h5>
+    <div class="card-body row py-1">
+        <div class="col-7 align-self-center text-center">
+            <h4>{ICON}</h4>
+            <h4>23.4 GiB</h4>
+        </div>
+        <div class="col-5">
+            <gauge [segments]="localSegments" class="dashboard-indicator"></gauge>
+            <gauge [segments]="remoteSegments" [invert]="true" class="dashboard-indicator"></gauge>
+        </div>
+    </div>
+</div>
