@@ -1,5 +1,6 @@
 import 'package:angular/angular.dart';
 
+import 'colors.dart';
 import 'gauge_component.dart';
 
 @Component(
@@ -14,22 +15,44 @@ class FolderComponent {
   @Input()
   FolderInfo folderInfo;
 
+  String get statusString {
+    switch (folderInfo.status) {
+      case FolderStatus.upToDate:
+        return "Up to date";
+      case FolderStatus.syncing:
+        return "Syncing";
+      case FolderStatus.errored:
+        return "Errored";
+    }
+  }
+
+  String get statusTextClass {
+    switch (folderInfo.status) {
+      case FolderStatus.upToDate:
+        return "text-success";
+      case FolderStatus.syncing:
+        return "text-info";
+      case FolderStatus.errored:
+        return "text-danger";
+    }
+  }
+
   List<Segment> get localSegments => [
-        Segment(folderInfo.error ? "#dc3545" : _colorFor(folderInfo.local),
+        Segment(folderInfo.error ? Colors.danger : _colorFor(folderInfo.local),
             folderInfo.local),
-        Segment("#f0f0f0", 100 - folderInfo.local)
+        Segment(Colors.grey, 100 - folderInfo.local)
       ];
 
   List<Segment> get remoteSegments => [
         Segment(_colorFor(folderInfo.remote), folderInfo.remote),
-        Segment("#f0f0f0", 100 - folderInfo.remote)
+        Segment(Colors.grey, 100 - folderInfo.remote)
       ];
 
   String _colorFor(double completion) {
     if (completion >= 100.0) {
-      return "#28a745";
+      return Colors.success;
     }
-    return "#17a2b8";
+    return Colors.info;
   }
 }
 
@@ -40,8 +63,6 @@ class FolderInfo {
   bool error;
 
   FolderInfo(this.label, this.local, this.remote, this.error);
-
-  String get percent => "${local.toStringAsFixed(1)} %";
 
   FolderStatus get status {
     if (error) {
@@ -54,24 +75,4 @@ class FolderInfo {
   }
 }
 
-class FolderStatus {
-  final int idx;
-
-  const FolderStatus(this.idx);
-
-  static const upToDate = FolderStatus(0);
-  static const syncing = FolderStatus(1);
-  static const errored = FolderStatus(2);
-
-  String toString() => {
-        upToDate.idx: "Up to date",
-        syncing.idx: "Syncing",
-        errored.idx: "Errored",
-      }[idx];
-
-  String get textClass => {
-        upToDate.idx: "text-success",
-        syncing.idx: "text-info",
-        errored.idx: "text-danger",
-      }[idx];
-}
+enum FolderStatus { upToDate, syncing, errored }

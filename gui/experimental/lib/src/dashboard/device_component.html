@@ -1,0 +1,34 @@
+<div class="card shadow my-2">
+    <h5 class="card-header">
+        <i class="fa fa-hdd"></i>&ensp;Some device
+        <span class="float-right">23.4 GiB</span>
+    </h5>
+    <div class="card-body">
+        <div class="row py-2">
+            <div class="col-7 align-self-center">
+                <h4 class="{{statusTextClass}}">{{statusString}}</h4>
+            </div>
+            <div class="col-5">
+                <div class="my-1">
+                    <gauge [segments]="segments"></gauge>
+                </div>
+            </div>
+        </div>
+        <template [ngIf]="connected">
+            <hr>
+            <div class="row">
+                <div class="col-6 text-center">
+                    <bitrate direction="up" [kbps]="deviceInfo.upKbps"></bitrate>
+                </div>
+                <div class="col-6 text-center">
+                    <bitrate direction="down" [kbps]="deviceInfo.downKbps"></bitrate>
+                </div>
+            </div>
+            <div *ngIf="viaRelay" class="row mt-2">
+                <div class="col text-center">
+                    <span class="{{connectionTextClass}}">{{connectionString}}</span>
+                </div>
+            </div>
+        </template>
+    </div>
+</div>
