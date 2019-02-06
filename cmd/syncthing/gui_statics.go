@@ -23,6 +23,11 @@ import (
 	"github.com/syncthing/syncthing/lib/sync"
 )
 
+type themedHTTPHandler interface {
+	http.Handler
+	setTheme(string)
+}
+
 type staticsServer struct {
 	assetDir        string
 	assets          map[string][]byte
@@ -205,3 +210,9 @@ func (s *staticsServer) setTheme(theme string) {
 func (s *staticsServer) String() string {
 	return fmt.Sprintf("staticsServer@%p", s)
 }
+
+type noopThemeSetter struct {
+	http.Handler
+}
+
+func (noopThemeSetter) setTheme(string) {}

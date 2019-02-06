@@ -1,7 +1,6 @@
 <div class="card shadow-sm my-2">
-    <h5 class="card-header">
-        <i class="fa fa-hdd"></i>&ensp;Some device
-        <span class="float-right">23.4 GiB</span>
+    <h5 class="card-header ellipsis">
+        <i class="fa fa-hdd"></i>&ensp;{{deviceInfo.label}}
     </h5>
     <div class="card-body">
         <div class="row py-2">
@@ -27,7 +26,7 @@
             </div>
             <div *ngIf="viaRelay" class="row mt-2">
                 <div class="col text-center">
-                    <span class="text-muted"><i class="fa fa-unlink"></i>&ensp;Connected via relay</span>
+                    <span class="text-muted"><i class="fa fa-map-signs"></i>&ensp;Connected via relay</span>
                 </div>
             </div>
         </template>

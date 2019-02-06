@@ -80,11 +80,13 @@ class DeviceComponent {
 }
 
 class DeviceInfo {
+  final String label;
   final DeviceConnection connection;
   final double completion;
   final double downKbps; // kilobits per second
   final double upKbps;
-  DeviceInfo(this.connection, this.completion, this.downKbps, this.upKbps);
+  DeviceInfo(
+      this.label, this.connection, this.completion, this.downKbps, this.upKbps);
 }
 
 enum DeviceConnection { None, Direct, Relay }

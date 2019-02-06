@@ -1,11 +1,10 @@
 <div class="card shadow-sm my-2">
-    <h5 class="card-header">
+    <h5 class="card-header ellipsis">
         <i class="fa fa-folder-open"></i>&ensp;{{folderInfo.label}}
-        <span class="float-right">23.4 GiB</span>
     </h5>
     <div class="card-body row py-2">
         <div class="col-7 align-self-center">
-            <h4 class="{{statusTextClass}}">{{statusString}}</h4>
+            <h4 class="{{stateTextClass}}">{{stateString}}</h4>
             <p *ngIf="folderInfo.remote >= 100" class="text-muted">Remotes up to date</p>
             <p *ngIf="folderInfo.remote < 100" class="text-muted">Remotes syncing</p>
         </div>

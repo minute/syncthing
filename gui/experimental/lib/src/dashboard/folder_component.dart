@@ -15,24 +15,24 @@ class FolderComponent {
   @Input()
   FolderInfo folderInfo;
 
-  String get statusString {
+  String get stateString {
     switch (folderInfo.status) {
-      case FolderStatus.upToDate:
+      case FolderState.upToDate:
         return "Up to date";
-      case FolderStatus.syncing:
+      case FolderState.syncing:
         return "Syncing";
-      case FolderStatus.errored:
+      case FolderState.errored:
         return "Errored";
     }
   }
 
-  String get statusTextClass {
+  String get stateTextClass {
     switch (folderInfo.status) {
-      case FolderStatus.upToDate:
+      case FolderState.upToDate:
         return "text-success";
-      case FolderStatus.syncing:
+      case FolderState.syncing:
         return "text-info";
-      case FolderStatus.errored:
+      case FolderState.errored:
         return "text-danger";
     }
   }
@@ -64,15 +64,15 @@ class FolderInfo {
 
   FolderInfo(this.label, this.local, this.remote, this.error);
 
-  FolderStatus get status {
+  FolderState get status {
     if (error) {
-      return FolderStatus.errored;
+      return FolderState.errored;
     }
     if (local < 100) {
-      return FolderStatus.syncing;
+      return FolderState.syncing;
     }
-    return FolderStatus.upToDate;
+    return FolderState.upToDate;
   }
 }
 
-enum FolderStatus { upToDate, syncing, errored }
+enum FolderState { upToDate, syncing, errored }

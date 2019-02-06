@@ -15,6 +15,7 @@ import (
 	"io/ioutil"
 	"net"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ type apiService struct {
 	cfg                configIntf
 	httpsCertFile      string
 	httpsKeyFile       string
-	statics            *staticsServer
+	statics            themedHTTPHandler
 	model              modelIntf
 	eventSubs          map[events.EventType]events.BufferedSubscription
 	eventSubsMut       sync.Mutex
@@ -151,7 +152,6 @@ func newAPIService(id protocol.DeviceID, cfg configIntf, httpsCertFile, httpsKey
 		cfg:           cfg,
 		httpsCertFile: httpsCertFile,
 		httpsKeyFile:  httpsKeyFile,
-		statics:       newStaticsServer(cfg.GUI().Theme, assetDir),
 		model:         m,
 		eventSubs: map[events.EventType]events.BufferedSubscription{
 			defaultEventMask: defaultSub,
@@ -167,6 +167,17 @@ func newAPIService(id protocol.DeviceID, cfg configIntf, httpsCertFile, httpsKey
 		guiErrors:          errors,
 		systemLog:          systemLog,
 		cpu:                cpu,
+	}
+
+	if dst, err := url.Parse(os.Getenv("STGUIPROXY")); err == nil && dst.String() != "" {
+		// We've been told to proxy the GUI stuff, so our "statics" server
+		// becomes a proxy towards the destination. The "noopThemeSetter"
+		// satisfies the themedHTTPHandler interface by doing nothing when
+		// asked to change theme.
+		service.statics = noopThemeSetter{httputil.NewSingleHostReverseProxy(dst)}
+	} else {
+		// This is the standard static files server.
+		service.statics = newStaticsServer(cfg.GUI().Theme, assetDir)
 	}
 
 	return service
