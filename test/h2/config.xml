@@ -20,6 +20,7 @@
         <weakHashThresholdPct>25</weakHashThresholdPct>
         <markerName>.stfolder</markerName>
         <useLargeBlocks>true</useLargeBlocks>
+        <copyOwnershipFromParent>false</copyOwnershipFromParent>
     </folder>
     <folder id="s23" label="" path="s23-2" type="sendreceive" rescanIntervalS="15" fsWatcherEnabled="false" fsWatcherDelayS="10" ignorePerms="false" autoNormalize="true">
         <filesystemType>basic</filesystemType>
@@ -41,6 +42,7 @@
         <weakHashThresholdPct>25</weakHashThresholdPct>
         <markerName>.stfolder</markerName>
         <useLargeBlocks>true</useLargeBlocks>
+        <copyOwnershipFromParent>false</copyOwnershipFromParent>
     </folder>
     <folder id="¯\_(ツ)_/¯ Räksmörgås 动作 Адрес" label="" path="s12-2" type="sendreceive" rescanIntervalS="15" fsWatcherEnabled="false" fsWatcherDelayS="10" ignorePerms="false" autoNormalize="true">
         <filesystemType>basic</filesystemType>
@@ -62,6 +64,7 @@
         <weakHashThresholdPct>25</weakHashThresholdPct>
         <markerName>.stfolder</markerName>
         <useLargeBlocks>true</useLargeBlocks>
+        <copyOwnershipFromParent>false</copyOwnershipFromParent>
     </folder>
     <device id="I6KAH76-66SLLLB-5PFXSOA-UFJCDZC-YAOMLEK-CP2GB32-BV5RQST-3PSROAU" name="s1" compression="metadata" introducer="false" skipIntroductionRemovals="false" introducedBy="">
         <address>tcp://127.0.0.1:22001</address>
@@ -90,7 +93,7 @@
     <gui enabled="true" tls="false" debugging="true">
         <address>127.0.0.1:8082</address>
         <apikey>abc123</apikey>
-        <theme>default</theme>
+        <theme>experimental</theme>
     </gui>
     <ldap></ldap>
     <options>
@@ -132,6 +135,5 @@
         <defaultFolderPath>~</defaultFolderPath>
         <setLowPriority>true</setLowPriority>
         <maxConcurrentScans>0</maxConcurrentScans>
-        <minHomeDiskFreePct>0</minHomeDiskFreePct>
     </options>
 </configuration>

@@ -1,4 +1,4 @@
-<div class="card shadow my-2">
+<div class="card shadow-sm my-2">
     <h5 class="card-header">
         <i class="fa fa-hdd"></i>&ensp;Some device
         <span class="float-right">23.4 GiB</span>
@@ -7,6 +7,7 @@
         <div class="row py-2">
             <div class="col-7 align-self-center">
                 <h4 class="{{statusTextClass}}">{{statusString}}</h4>
+                <span *ngIf="connected && action != null" class="text-muted">{{action}}</span>
             </div>
             <div class="col-5">
                 <div class="my-1">
@@ -14,9 +15,9 @@
                 </div>
             </div>
         </div>
-        <template [ngIf]="connected">
+        <template [ngIf]="connected && (!idle || viaRelay)">
             <hr>
-            <div class="row">
+            <div *ngIf="!idle" class="row">
                 <div class="col-6 text-center">
                     <bitrate direction="up" [kbps]="deviceInfo.upKbps"></bitrate>
                 </div>
@@ -26,7 +27,7 @@
             </div>
             <div *ngIf="viaRelay" class="row mt-2">
                 <div class="col text-center">
-                    <span class="{{connectionTextClass}}">{{connectionString}}</span>
+                    <span class="text-muted"><i class="fa fa-unlink"></i>&ensp;Connected via relay</span>
                 </div>
             </div>
         </template>

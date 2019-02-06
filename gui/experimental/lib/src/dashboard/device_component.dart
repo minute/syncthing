@@ -14,11 +14,31 @@ import 'gauge_component.dart';
   ],
 )
 class DeviceComponent {
+  static const activityCutoffKbps = 50;
+
   @Input()
   DeviceInfo deviceInfo;
 
   bool get connected => deviceInfo.connection != DeviceConnection.None;
   bool get viaRelay => deviceInfo.connection == DeviceConnection.Relay;
+  bool get idle =>
+      deviceInfo.downKbps < activityCutoffKbps &&
+      deviceInfo.downKbps < activityCutoffKbps;
+
+  String get action {
+    if (idle) {
+      return "Idle";
+    }
+    if (deviceInfo.upKbps > activityCutoffKbps &&
+        deviceInfo.upKbps > 5 * deviceInfo.downKbps) {
+      return "Uploading";
+    }
+    if (deviceInfo.downKbps > activityCutoffKbps &&
+        deviceInfo.downKbps > 5 * deviceInfo.upKbps) {
+      return "Downloading";
+    }
+    return "Up- & downloading";
+  }
 
   String get statusString {
     if (deviceInfo.connection == DeviceConnection.None) {
@@ -38,28 +58,6 @@ class DeviceComponent {
       return "text-info";
     }
     return "text-success";
-  }
-
-  String get connectionString {
-    switch (deviceInfo.connection) {
-      case DeviceConnection.Direct:
-        return "Directly connected";
-      case DeviceConnection.Relay:
-        return "Connected via relay";
-      case DeviceConnection.None:
-        return "Disconnected";
-    }
-  }
-
-  String get connectionTextClass {
-    switch (deviceInfo.connection) {
-      case DeviceConnection.Direct:
-        return "text-secondary";
-      case DeviceConnection.Relay:
-        return "text-warning";
-      case DeviceConnection.None:
-        return "text-secondary";
-    }
   }
 
   String get completionColor {
